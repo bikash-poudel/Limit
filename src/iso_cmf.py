@@ -46,21 +46,26 @@ c = p.NewCell(0, 0, 0, 1000)
 
 # Customize cell
 # Top layer thickness of e10-5 m as per SISPAT_iso
-lower_boundaries_of_layer = [0.00001, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55,
+lower_boundaries_of_layer = [0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55,
                              0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00]
 
 
 for d in lower_boundaries_of_layer:
-    c.add_layer(d, VGM_retention_curve)
-    c.saturated_depth = d
+    l = c.add_layer(d, VGM_retention_curve)
+    #c.saturated_depth = d   # initial wetness gives wrong values of theta and wetness. (theta > porosity,  wetness larget then 1)
+    l.wetness = 1   ##### Check tehts exceeds porosity if  l.wetness = 1.0
+    #c.saturated_depth = 0  # check for wetness = 1, saturated depth = 0,
+
 
 # Create a surfacewater storage
 c.surfacewater_as_storage()
+
 # use Richards connection
 c.install_connection(cmf.Richards)
 
 # Create a Neumann Boundary condition connected to top layer to account for flows due to evaporation
 E_act = cmf.NeumannBoundary_create(c.layers[0])
+E_act.flux = cmf.timeseries_from_scalar(0.0)
 
 # Create a List of Neumann Boundary condition and connect each one to a layer to account for possible lateral flow
 lateral_flows = cmf.NeumannBoundary_list()
@@ -74,7 +79,7 @@ transpiration_flows = cmf.NeumannBoundary_list()
 for i_layer in c.layers:
     i_transpiration_flow = cmf.NeumannBoundary_create(i_layer)
     i_transpiration_flow.flux = cmf.timeseries_from_scalar(0.0)
-    lateral_flows.append(i_transpiration_flow)
+    transpiration_flows.append(i_transpiration_flow)
 
 # Make an outlet (Groundwater as a boundary condition)
 # Add again later: groundwater=p.NewOutlet(name = 'outlet', x=0, y=0, z=-1) # creates a Dirichlet boundary condition with the potential z and add it to the list of outlets
@@ -82,8 +87,8 @@ for i_layer in c.layers:
 # TODO make groundwater impermeable or remove it
 
 # Simulation period
-start = cmf.Time(1, 1, 2010)
-end = start + timedelta(days=250)  # run cmf for 250 days
+start = cmf.Time(1, 1, 2020)
+end = start + timedelta(days=300)  # run cmf for 250 days
 dt = cmf.h  # time step
 
 # Make solver
@@ -123,118 +128,131 @@ for i_lower_boundary, i_cmf_layer in zip(lower_boundaries_of_layer, c.layers):
     i_upper_boundary = i_lower_boundary
     my_layers.append(my_iso_layer)
 
+
+my_time = iso_time(final_time=300*24,
+                   delta_time=1,
+                   time_units='hours')
+
 # The run time loop. Iterates over the outer timestep of the model
-theta_layers = []
-ql_up_t1 = []
-ql_down_t1 = []
+Ciso = {'2H': [], '18O': []}
+
+theta_t = [np.array(c.layers.theta)]
+ql_up_t = []
+ql_down_t = []
 evap = []
-for t in solver.run(solver.t, end, dt):
+while solver.t < end:
 
-    # get fluxes of the next time step
-    ql_layers_up_t1 = []  # flux in m3/d during the last time step
-    ql_layers_down_t1 = []  # flux in m3/d during the last time step
+    theta_t0 = c.layers.theta
 
+    # run cmf for one time step
+    solver.reset()
+    solver.integratables.reset(solver.t)
+    solver(solver.t + dt)
+
+    theta_t1 = c.layers.theta
+    theta_t.append(theta_t1)
+
+    """"
     # Todo: Implement like this:
     for i_iso_layer, i_cmf_layer in zip(my_layers, c.layers):
         if i_cmf_layer.upper is None and i_cmf_layer.lower is not None:
             ql_layers_up_t1.append(0.0)
-            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, t))
+            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, solver.t))
         elif i_cmf_layer.upper is not None and i_cmf_layer.lower is not None:
-            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, t))
-            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, t))
+            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t))
+            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, solver.t))
         elif i_cmf_layer.upper is not None and i_cmf_layer.lower is None:
-            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, t))
+            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t))
             ql_layers_down_t1.append(0.0)
+    """
 
-    ql_up_t1.append(ql_layers_up_t1)
-    ql_down_t1.append(ql_layers_down_t1)
-    theta_layers.append(c.layers.wetness * c.layers.porosity)
+
+for t in range(my_time.time_steps):
+
+    ql = 0.1 / 1000 / 86400  #* my_time.total_seconds()  # 1mm per day
+    # get fluxes of the current time step
+    ql_layers_up_t1 = [0] * len(my_layers)  # flux in m3/d during the last time step
+    ql_layers_up_t1[0] = 0
+    ql_layers_down_t1 = [0] * len(my_layers)  # flux in m3/d during the last time step
+    ql_layers_down_t1[-1] = 0
+    qv_up = [0] * len(my_layers)
+    qv_down = [0] * len(my_layers)
+
+    ql_up_t.append(ql_layers_up_t1)
+    ql_down_t.append(ql_layers_down_t1)
 
     # Evaporation
-    E_pot = -1.005e-5 # kg/(m2*s)
+    E_pot = -1.005e-5 #* my_time.total_seconds()  # kg/(m2 * s) (original value -1.005e-5 kg/(m2*s))
 
     # calculate actual Evaporation for the next time step
     ha_surface = rH_atmosphere * iso_atmosphere.pv_sat(T_atmosphere) / iso_atmosphere.pv_sat(my_layers[0].T)
-
-    actual_Evaporation = E_pot * (c.layers[0].wetness - ha_surface) / (
+    hs_surface = 0.2
+    actual_Evaporation = E_pot * (ha_surface - hs_surface) / (
                 1 - ha_surface) * c.area  # calculates the actual evaporation in kg/day
     E_act.flux = cmf.timeseries_from_scalar(actual_Evaporation)
     evap.append(actual_Evaporation)
-    solver.reset()
+    #th = [0.35] * len(my_layers)  # check for constant theta
+    fluxes = [ql_layers_up_t1, ql_layers_down_t1, qv_up, qv_down, [theta_t[t], theta_t[t]]]
 
-theta_layers.append(theta_layers[-1])  # tehta value for last time step as the preceeding one
+    def BC(evap):
+        # Boundary conditions
+        U_boundary_conc = iso.delta_to_concentration(delta_i=-65, solute_i='2H')
+        L_boundary_conc = iso.delta_to_concentration(delta_i=-65, solute_i='2H')
 
-my_time = iso_time(final_time=250*24,
-                   delta_time=1,
-                   time_units='hours')  # 'seconds' , 'minutes', 'hours', 'days'
+        BC = BoundaryCondition()
+        BC.upper_boundary('atmosphere',
+                          evap)  # neuman[flux] / dirichlet[constant conc] / atmosphere[potential evaporation]
+        BC.lower_boundary('neuman', 0)  # TODO: need to check lower boundary
 
-# Run isotope model
-Ciso = {}
-for solute in ['2H', '18O']:
-    C_t = [[layer.c_solutes[solute] for layer in my_layers]]  # Initial isotopic concentration for all layers
-    for t in range(my_time.time_steps-1):
+        return BC
 
-        theta_t0 = theta_layers[t]
-        theta_t1 = theta_layers[t+1]
 
-        qv_up = [0] * len(my_layers)
-        qv_down = [0] * len(my_layers)
+    B_C = BC(E_pot)
 
-        flux = [ql_up_t1[t], ql_down_t1[t], qv_up, qv_down, [theta_t0, theta_t1]]
-        evaporation = evap[t]
+    # Run iso_top simulation
+    Ci_t = iso.run_1D_model(my_iso_atmosphere, my_layers, fluxes, B_C, my_time, solutes=['2H'],
+                            ignore_alpha_i=ignorealphai,
+                            ignore_alpha_i_k=ignorealphaik,
+                            ignore_dl_i=ignoredl,
+                            ignore_dv_i=ignoredv)
 
-        def BC(evap):
-            E_pot = -1.005e-5  # kg/(m2*s)
-            # Boundary conditions
+    update_layers = iso.update_c_i(Ci_t['2H'], '2H', my_layers)
+    my_layers = update_layers
+    # my_layers = iso.update_c_i(Ci_t['2H'], '18O', my_layers)
 
-            U_boundary_conc = iso.delta_to_concentration(delta_i=-65, solute_i='2H')
-            L_boundary_conc = iso.delta_to_concentration(delta_i=-65, solute_i='2H')
+    Ciso['2H'].append(Ci_t['2H'])
+    # Ciso['18O'].append(Ci_t['18O'])
 
-            BC = BoundaryCondition()
-            BC.upper_boundary('atmosphere', E_pot)  # neuman[flux] / dirichlet[constant conc] / atmosphere[potential evaporation]
-            BC.lower_boundary('neuman', 0)  # TODO: need to check lower boundary
 
-            return BC
-
-        B_C = BC(evaporation)
-
-        # Run simulations
-        Ci_t = iso.run_1D_model(c, my_iso_atmosphere, my_layers, flux, B_C, solute,
-                                ignore_alpha_i=ignorealphai,
-                                ignore_alpha_i_k=ignorealphaik,
-                                ignore_dl_i=ignoredl,
-                                ignore_dv_i=ignoredv)
-
-        updated_layers = iso.update_c_i(Ci_t, solute, my_layers)
-        my_layers = updated_layers
-
-        C_t.append(Ci_t)
-
-    Ciso[solute] = C_t
 
 C2H = np.array(Ciso['2H']).T
 #C18O = np.array(Ciso['18O']).T
+
+theta = np.array(theta_t).T
+ql_up = np.array(ql_up_t).T
+ql_down = np.array(ql_down_t).T
 
 # Convert Result into delta notation
 my_vectorized_function = np.vectorize(iso.concentration_to_delta, excluded=['solute_i'])
 C_delta = my_vectorized_function(C2H, solute_i='2H')
 #C18O_delta = my_vectorized_function(C18O, solute_i='18O')
 
+
 #Visualize
 plot = Visualize(my_layers, my_time)
-plot.profile(C_delta, solute_i='2H', print_time_steps=24*20)
+plot.profile(C_delta, solute_i='2H', print_time_steps=24*50)
 plot.breakthrough(C_delta, solute_i='2H', print_steps=2)
 
 plt.plot(evap, label='evaporation')
 plt.legend()
 plt.show()
 
-layer = 0
-theta_l = [theta[layer] for theta in theta_layers]
-plt.plot(theta_l, label='theta_top_layer')
+plt.plot(theta[0], label='theta_top_layer')
 plt.legend()
 plt.show()
 
-plt.plot(ql_up_t1[-1], range(len(ql_up_t1[-1])), label='flux at final time')
+plt.plot(ql_up[:, 1], -np.arange(len(my_layers)), label='flux_up at final time')
+plt.plot(ql_down[:, 1], -np.arange(len(my_layers)), label='flux_down at final time')
 plt.legend()
 plt.show()
+

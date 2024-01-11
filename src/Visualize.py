@@ -34,6 +34,7 @@ class Visualize(object):
     def profile(self, C, solute_i, print_time_steps, label_depth='m'):
 
         layers_center = np.array([layer.center for layer in self.__layers])
+
         # Concentration vs depth
         fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
         for t in range(0, self.time.time_steps, int(print_time_steps)):
