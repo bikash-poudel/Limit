@@ -56,9 +56,8 @@ for d in lower_boundaries_of_layer:
     l.wetness = 1   ##### Check tehts exceeds porosity if  l.wetness = 1.0
     #c.saturated_depth = 0  # check for wetness = 1, saturated depth = 0,
 
-
 # Create a surfacewater storage
-c.surfacewater_as_storage()
+#c.surfacewater_as_storage()
 
 # use Richards connection
 c.install_connection(cmf.Richards)
@@ -67,20 +66,6 @@ c.install_connection(cmf.Richards)
 E_act = cmf.NeumannBoundary_create(c.layers[0])
 E_act.flux = cmf.timeseries_from_scalar(0.0)
 
-# Create a List of Neumann Boundary condition and connect each one to a layer to account for possible lateral flow
-lateral_flows = cmf.NeumannBoundary_list()
-for i_layer in c.layers:
-    i_lateral_flow = cmf.NeumannBoundary_create(i_layer)
-    i_lateral_flow.flux = cmf.timeseries_from_scalar(0.0)
-    lateral_flows.append(i_lateral_flow)
-
-# Create a List of Neumann Boundary condition and connect each one to a layer to account for possible flow due to transpiration/root extraction
-transpiration_flows = cmf.NeumannBoundary_list()
-for i_layer in c.layers:
-    i_transpiration_flow = cmf.NeumannBoundary_create(i_layer)
-    i_transpiration_flow.flux = cmf.timeseries_from_scalar(0.0)
-    transpiration_flows.append(i_transpiration_flow)
-
 # Make an outlet (Groundwater as a boundary condition)
 # Add again later: groundwater=p.NewOutlet(name = 'outlet', x=0, y=0, z=-1) # creates a Dirichlet boundary condition with the potential z and add it to the list of outlets
 
@@ -88,7 +73,7 @@ for i_layer in c.layers:
 
 # Simulation period
 start = cmf.Time(1, 1, 2020)
-end = start + timedelta(days=300)  # run cmf for 250 days
+end = start + timedelta(days=300)  # run cmf for 300 days
 dt = cmf.h  # time step
 
 # Make solver
@@ -128,15 +113,15 @@ for i_lower_boundary, i_cmf_layer in zip(lower_boundaries_of_layer, c.layers):
     i_upper_boundary = i_lower_boundary
     my_layers.append(my_iso_layer)
 
-
 my_time = iso_time(final_time=300*24,
                    delta_time=1,
                    time_units='hours')
 
-# The run time loop. Iterates over the outer timestep of the model
-Ciso = {'2H': [], '18O': []}
 
 theta_t = [np.array(c.layers.theta)]
+potential = [c.layers.potential]
+moisture = [c.layers.theta]
+hs = []
 ql_up_t = []
 ql_down_t = []
 evap = []
@@ -165,7 +150,46 @@ while solver.t < end:
             ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t))
             ql_layers_down_t1.append(0.0)
     """
+    def soil_relative_humidity(h, T, R=461.5, g=9.81):
 
+        """
+        Calculates the relative humidity at given soil depth for given pressure head and temperature  certain
+        soil depth according to Braud et al. 2005 Eq. 46
+
+        Description
+        == == == == == =
+
+         @param h: pressure head [m]
+
+         @param R: perfect gas mass constant for water vapour [J kg-1]
+
+         @param T: Temperaturtre in kelvin [k]
+
+         @param g: acceleration due to gravity [ms-2]
+        """
+
+        hu = exp(g * h / (R * T))
+
+        return hu
+
+    # Evaporation
+    E_pot = -1.005e-5 #* my_time.total_seconds()  # kg/(m2 * s) (original value -1.005e-5 kg/(m2*s))
+
+    # calculate actual Evaporation for the next time step
+    ha_surface = rH_atmosphere * iso_atmosphere.pv_sat(T_atmosphere) / iso_atmosphere.pv_sat(my_layers[0].T)
+    hs_surface = soil_relative_humidity(c.layers[0].matrix_potential, 303) #c.layers.wetness  # 0.2
+    actual_Evaporation = E_pot * (hs_surface - ha_surface) / (
+            1 - ha_surface) * c.area  # calculates the actual evaporation in kg/day
+    E_act.flux = cmf.timeseries_from_scalar(actual_Evaporation)
+    evap.append(actual_Evaporation)
+    hs.append(hs_surface)
+
+    potential.append(c.layers.potential)
+    moisture.append(c.layers.theta)
+
+
+# The run time loop. Iterates over the outer timestep of the model
+Ciso = {'2H': [], '18O': []}
 
 for t in range(my_time.time_steps):
 
@@ -181,16 +205,6 @@ for t in range(my_time.time_steps):
     ql_up_t.append(ql_layers_up_t1)
     ql_down_t.append(ql_layers_down_t1)
 
-    # Evaporation
-    E_pot = -1.005e-5 #* my_time.total_seconds()  # kg/(m2 * s) (original value -1.005e-5 kg/(m2*s))
-
-    # calculate actual Evaporation for the next time step
-    ha_surface = rH_atmosphere * iso_atmosphere.pv_sat(T_atmosphere) / iso_atmosphere.pv_sat(my_layers[0].T)
-    hs_surface = 0.2
-    actual_Evaporation = E_pot * (ha_surface - hs_surface) / (
-                1 - ha_surface) * c.area  # calculates the actual evaporation in kg/day
-    E_act.flux = cmf.timeseries_from_scalar(actual_Evaporation)
-    evap.append(actual_Evaporation)
     #th = [0.35] * len(my_layers)  # check for constant theta
     fluxes = [ql_layers_up_t1, ql_layers_down_t1, qv_up, qv_down, [theta_t[t], theta_t[t]]]
 
@@ -210,7 +224,7 @@ for t in range(my_time.time_steps):
     B_C = BC(E_pot)
 
     # Run iso_top simulation
-    Ci_t = iso.run_1D_model(my_iso_atmosphere, my_layers, fluxes, B_C, my_time, solutes=['2H'],
+    Ci_t = iso.run_1D_model(my_iso_atmosphere, my_layers, fluxes, B_C, my_time, hs[t], solutes=['2H'],
                             ignore_alpha_i=ignorealphai,
                             ignore_alpha_i_k=ignorealphaik,
                             ignore_dl_i=ignoredl,
@@ -247,12 +261,28 @@ plt.plot(evap, label='evaporation')
 plt.legend()
 plt.show()
 
+plt.plot(ql_up[:, 1], -np.arange(len(my_layers)), label='flux_up at final time')
+plt.plot(ql_down[:, 1], -np.arange(len(my_layers)), label='flux_down at final time')
+plt.legend()
+plt.show()
+
+plt.plot(theta[:, -1], -np.arange(len(my_layers)), label='soil moisture at the end')
+plt.legend()
+plt.show()
+
 plt.plot(theta[0], label='theta_top_layer')
 plt.legend()
 plt.show()
 
-plt.plot(ql_up[:, 1], -np.arange(len(my_layers)), label='flux_up at final time')
-plt.plot(ql_down[:, 1], -np.arange(len(my_layers)), label='flux_down at final time')
+plt.plot(hs, label='soil surface relative humidity')
 plt.legend()
+plt.show()
+
+plt.plot(potential)
+plt.title('potential')
+plt.show()
+
+plt.plot(moisture)
+plt.title('moisture')
 plt.show()
 

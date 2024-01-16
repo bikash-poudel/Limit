@@ -16,7 +16,8 @@ from scipy.sparse.linalg import spsolve
 
 # Function to run 1D vertical transport
 
-def run_1D_model(atmosphere, layers, Q, BC, time, solutes,
+
+def run_1D_model(atmosphere, layers, Q, BC, time, hs_surface, solutes,
                  ignore_alpha_i=False,
                  ignore_alpha_i_k=False,
                  ignore_dl_i=False,
@@ -53,7 +54,7 @@ def run_1D_model(atmosphere, layers, Q, BC, time, solutes,
             eff_liquid_diffusivity = dl_i_eff(dl_i=liquid_diffusivity, q_l=ql_up[l])
 
             alpha = alpha_i(T, solute, ignore_alpha_i)
-            beta = beta_i(alpha_i=alpha, density_h2o_vapour=0.0822)    #TODO: check for vapor density
+            beta = beta_i(alpha_i=alpha, density_h2o_vapour=0.59)    #TODO: check for vapor density
 
             Dlv_upper = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
             Dlv_current = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
@@ -138,7 +139,7 @@ def run_1D_model(atmosphere, layers, Q, BC, time, solutes,
                                                       T_soil=layer.T)
 
                     #rH_soil = theta_t0[0] / layer.porosity  # wetnes(humidity)s of the layer
-                    rH_soil = 0.20
+                    rH_soil = hs_surface
 
                     qi_evap = q_i_Evaporation_Braud_old(E_pot=BC.upper_boundary_content,
                                                        alpha_i=alpha,
@@ -515,9 +516,9 @@ def alpha_i(T, solute, ignore_alpha_i=False):
     try:
         # SLI: cable_sli_solve.f90::L2275 - L2305
         if ignore_alpha_i == False:
-            if "18O" == solute:
+            if "2H" == solute:
                 alpha_i = exp(-(24844 / T ** 2 + (-76.248) / T + 0.052612))
-            elif "2H" == solute:
+            elif "18O" == solute:
                 alpha_i = exp(-(1137 / T ** 2 + (-0.4156) / T - 0.0020667))
             else:
                 raise NotImplementedError
