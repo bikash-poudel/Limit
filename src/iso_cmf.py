@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 # Likelihood Tests (Mathieu and Bariac (1996).)
 ignorealphai = True
 ignorealphaik = True
-ignoredl = True
+ignoredl = False
 ignoredv = True
 
 Braud_Ksat = 0.0106272  # in m/d
@@ -38,11 +38,13 @@ VGM_retention_curve = cmf.VanGenuchtenMualem(Ksat=Braud_Ksat,
                                              m=Braud_m,
                                              theta_r=Braud_theta_r)
 
+VGM_retention_curve.w0 = 0.9995  # See: https://philippkraft.github.io/cmf/cmf_tut_retentioncurve.html Oversaturation
 # Create a project
 p = cmf.project()
 
 # Create a cell at position (0,0,0) with 1000m2 size (making conversion from m3 to mm trivial)
 c = p.NewCell(0, 0, 0, 1000)
+#c.vegetation.RootDepth = 0.0
 
 # Customize cell
 # Top layer thickness of e10-5 m as per SISPAT_iso
@@ -62,22 +64,38 @@ for d in lower_boundaries_of_layer:
 # use Richards connection
 c.install_connection(cmf.Richards)
 
-# Create a Neumann Boundary condition connected to top layer to account for flows due to evaporation
-E_act = cmf.NeumannBoundary_create(c.layers[0])
-E_act.flux = cmf.timeseries_from_scalar(0.0)
 
-# Make an outlet (Groundwater as a boundary condition)
-# Add again later: groundwater=p.NewOutlet(name = 'outlet', x=0, y=0, z=-1) # creates a Dirichlet boundary condition with the potential z and add it to the list of outlets
 
-# TODO make groundwater impermeable or remove it
+#Evaportation
+ET_CMF = True
+E_pot = -1.005e-5  # kg/(m2 * s) or[ mm s-1]
+
+if ET_CMF == False:
+    # Create a Neumann Boundary condition connected to top layer to account for flows due to evaporation
+    E_act = cmf.NeumannBoundary_create(c.layers[0])
+    E_act.flux = cmf.timeseries_from_scalar(0.0)
+elif ET_CMF == True: #use CMF to calculate the ETact based on a fixed ETpot
+    potET = abs(E_pot) * 86400  # mm/day
+    ETpot = cmf.timeseries.from_scalar(potET)
+
+    for layer in c.layers:
+        cmf.timeseriesETpot(layer, c.evaporation, ETpot)  # connection to top only or to all layers ???
+        # et_pot_connection = cmf.timeseriesETpot(layer, c.evaporation, ETpot)
+else:
+    raise NotImplementedError
 
 # Simulation period
 start = cmf.Time(1, 1, 2020)
-end = start + timedelta(days=300)  # run cmf for 300 days
+end = start + timedelta(days=50)  # run cmf for 300 days
 dt = cmf.h  # time step
 
 # Make solver
-solver = cmf.CVodeIntegrator(p, 1e-6)
+# Different solvers in cmf2
+solver = cmf.CVodeBanded(p, 1e-09)
+#solver.t = start
+# Complete Jacobian, alternatives: CVodeBanded, for komplex sparse Jacobians: CVodeKLU,
+# CVodeKrylov -> like Banded but with "Krylov preconditioner", CVodeAdams an very advance explicit solver
+
 solver.t = start
 
 # Setup
@@ -113,10 +131,14 @@ for i_lower_boundary, i_cmf_layer in zip(lower_boundaries_of_layer, c.layers):
     i_upper_boundary = i_lower_boundary
     my_layers.append(my_iso_layer)
 
-my_time = iso_time(final_time=300*24,
+my_time = iso_time(final_time=(end-start)/cmf.h,
                    delta_time=1,
                    time_units='hours')
 
+
+# The run time loop. Iterates over the outer timestep of the model
+Ciso = {'2H': [], '18O': []}
+#et_act = cmf.timeseries(solver.t, cmf.day)
 
 theta_t = [np.array(c.layers.theta)]
 potential = [c.layers.potential]
@@ -127,29 +149,38 @@ ql_down_t = []
 evap = []
 while solver.t < end:
 
-    theta_t0 = c.layers.theta
-
     # run cmf for one time step
-    solver.reset()
-    solver.integratables.reset(solver.t)
+    # solver.reset() # - Resets the solver history. Only needed if you really change something in the system
     solver(solver.t + dt)
 
     theta_t1 = c.layers.theta
     theta_t.append(theta_t1)
 
-    """"
+    ql_layers_up_t1 = []
+    ql_layers_down_t1 = []
+    qv_up = []
+    qv_down = []
+
+    f = cmf.sec/cmf.day / c.area  # convert to m per second
+    qqq = 0.0
     # Todo: Implement like this:
     for i_iso_layer, i_cmf_layer in zip(my_layers, c.layers):
         if i_cmf_layer.upper is None and i_cmf_layer.lower is not None:
-            ql_layers_up_t1.append(0.0)
-            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, solver.t))
+            ql_layers_up_t1.append(0.0 * f + qqq)
+            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, solver.t) * f + qqq)
         elif i_cmf_layer.upper is not None and i_cmf_layer.lower is not None:
-            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t))
-            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, solver.t))
+            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t) * f + qqq)
+            ql_layers_down_t1.append(i_cmf_layer.flux_to(i_cmf_layer.lower, solver.t) * f + qqq)
         elif i_cmf_layer.upper is not None and i_cmf_layer.lower is None:
-            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t))
-            ql_layers_down_t1.append(0.0)
-    """
+            ql_layers_up_t1.append(i_cmf_layer.flux_to(i_cmf_layer.upper, solver.t) * f + qqq)
+            ql_layers_down_t1.append(0.0 * f)
+
+    qv_up = [0] * len(my_layers)
+    qv_down = [0] * len(my_layers)
+
+    ql_up_t.append(ql_layers_up_t1)
+    ql_down_t.append(ql_layers_down_t1)
+
     def soil_relative_humidity(h, T, R=461.5, g=9.81):
 
         """
@@ -173,49 +204,31 @@ while solver.t < end:
         return hu
 
     # Evaporation
-    E_pot = -1.005e-5 #* my_time.total_seconds()  # kg/(m2 * s) (original value -1.005e-5 kg/(m2*s))
 
     # calculate actual Evaporation for the next time step
     ha_surface = rH_atmosphere * iso_atmosphere.pv_sat(T_atmosphere) / iso_atmosphere.pv_sat(my_layers[0].T)
-    hs_surface = soil_relative_humidity(c.layers[0].matrix_potential, 303) #c.layers.wetness  # 0.2
-    actual_Evaporation = E_pot * (hs_surface - ha_surface) / (
-            1 - ha_surface) * c.area  # calculates the actual evaporation in kg/day
-    E_act.flux = cmf.timeseries_from_scalar(actual_Evaporation)
+    hs_surface = soil_relative_humidity(c.layers[0].matrix_potential, 303)
+
+    if ET_CMF == False:
+        actual_Evaporation = E_pot / 1000 * c.area * 86400 * (hs_surface - ha_surface) / (1 - ha_surface)   # m3 per day
+    elif ET_CMF == True:
+        actual_Evaporation = c.evaporation(solver.t)
+
     evap.append(actual_Evaporation)
     hs.append(hs_surface)
 
     potential.append(c.layers.potential)
     moisture.append(c.layers.theta)
 
-
-# The run time loop. Iterates over the outer timestep of the model
-Ciso = {'2H': [], '18O': []}
-
-for t in range(my_time.time_steps):
-
-    ql = 0.1 / 1000 / 86400  #* my_time.total_seconds()  # 1mm per day
-    # get fluxes of the current time step
-    ql_layers_up_t1 = [0] * len(my_layers)  # flux in m3/d during the last time step
-    ql_layers_up_t1[0] = 0
-    ql_layers_down_t1 = [0] * len(my_layers)  # flux in m3/d during the last time step
-    ql_layers_down_t1[-1] = 0
-    qv_up = [0] * len(my_layers)
-    qv_down = [0] * len(my_layers)
-
-    ql_up_t.append(ql_layers_up_t1)
-    ql_down_t.append(ql_layers_down_t1)
-
-    #th = [0.35] * len(my_layers)  # check for constant theta
-    fluxes = [ql_layers_up_t1, ql_layers_down_t1, qv_up, qv_down, [theta_t[t], theta_t[t]]]
+    fluxes = [ql_layers_up_t1, ql_layers_down_t1, qv_up, qv_down, [[0.35]*len(my_layers), [0.35]*len(my_layers)]]
 
     def BC(evap):
         # Boundary conditions
-        U_boundary_conc = iso.delta_to_concentration(delta_i=-65, solute_i='2H')
+        U_boundary_conc = iso.delta_to_concentration(delta_i=-70, solute_i='2H')
         L_boundary_conc = iso.delta_to_concentration(delta_i=-65, solute_i='2H')
 
         BC = BoundaryCondition()
-        BC.upper_boundary('atmosphere',
-                          evap)  # neuman[flux] / dirichlet[constant conc] / atmosphere[potential evaporation]
+        BC.upper_boundary('dirichlet', U_boundary_conc)  # neuman[flux] / dirichlet[constant conc] / atmosphere[potential evaporation]
         BC.lower_boundary('neuman', 0)  # TODO: need to check lower boundary
 
         return BC
@@ -223,20 +236,23 @@ for t in range(my_time.time_steps):
 
     B_C = BC(E_pot)
 
-    # Run iso_top simulation
-    Ci_t = iso.run_1D_model(my_iso_atmosphere, my_layers, fluxes, B_C, my_time, hs[t], solutes=['2H'],
-                            ignore_alpha_i=ignorealphai,
-                            ignore_alpha_i_k=ignorealphaik,
-                            ignore_dl_i=ignoredl,
-                            ignore_dv_i=ignoredv)
+    delta_t = 3600  # descrete time dt [s]
+    time_steps = my_time.total_seconds() / delta_t
 
-    update_layers = iso.update_c_i(Ci_t['2H'], '2H', my_layers)
-    my_layers = update_layers
-    # my_layers = iso.update_c_i(Ci_t['2H'], '18O', my_layers)
+    for t_steps in range(int(time_steps)):
+        # Run iso_top simulation
+        Ci_t = iso.run_1D_model(my_iso_atmosphere, my_layers, fluxes, B_C, my_time, hs_surface, solutes=['2H'],
+                                ignore_alpha_i=ignorealphai,
+                                ignore_alpha_i_k=ignorealphaik,
+                                ignore_dl_i=ignoredl,
+                                ignore_dv_i=ignoredv)
+
+        update_layers = iso.update_c_i(Ci_t['2H'], '2H', my_layers)
+        my_layers = update_layers
+        # my_layers = iso.update_c_i(Ci_t['2H'], '18O', my_layers)
 
     Ciso['2H'].append(Ci_t['2H'])
     # Ciso['18O'].append(Ci_t['18O'])
-
 
 
 C2H = np.array(Ciso['2H']).T
@@ -254,15 +270,15 @@ C_delta = my_vectorized_function(C2H, solute_i='2H')
 
 #Visualize
 plot = Visualize(my_layers, my_time)
-plot.profile(C_delta, solute_i='2H', print_time_steps=24*50)
+plot.profile(C_delta, solute_i='2H', print_time_steps=24*5)
 plot.breakthrough(C_delta, solute_i='2H', print_steps=2)
 
 plt.plot(evap, label='evaporation')
 plt.legend()
 plt.show()
 
-plt.plot(ql_up[:, 1], -np.arange(len(my_layers)), label='flux_up at final time')
-plt.plot(ql_down[:, 1], -np.arange(len(my_layers)), label='flux_down at final time')
+plt.plot(ql_up[:, -1], -np.arange(len(my_layers)), label='flux_up at final time')
+#plt.plot(ql_down[:, -1], -np.arange(len(my_layers)), label='flux_down at final time')
 plt.legend()
 plt.show()
 

@@ -54,7 +54,7 @@ def run_1D_model(atmosphere, layers, Q, BC, time, hs_surface, solutes,
             eff_liquid_diffusivity = dl_i_eff(dl_i=liquid_diffusivity, q_l=ql_up[l])
 
             alpha = alpha_i(T, solute, ignore_alpha_i)
-            beta = beta_i(alpha_i=alpha, density_h2o_vapour=0.59)    #TODO: check for vapor density
+            beta = beta_i(alpha_i=alpha, density_h2o_vapour=0.822)    #TODO: check for vapor density
 
             Dlv_upper = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
             Dlv_current = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
@@ -309,6 +309,39 @@ def dv_i(T, solute,  Pa=10 ** 5, ignore_dv_i=False):
             dv_i = d_v / b_i  # SLI: dv = Dvs ; dv_i = Divs ; 1/b_i = alphak_vdiff
 
             return dv_i
+
+    except ValueError as err:
+        print(err)
+        raise NotImplementedError
+
+
+def dv_soil_air(dv_free_air, theta, theta_sat, tortuosity):
+    """
+    Calculates the vapour diffusivity of water in soil air space (m**2/s)
+
+    Description
+    ===========
+
+    @param dv_free_air: diffusivity of water in free air (m**2/s)
+    @type dv_free_air: Float
+
+    @param theta: air pressure in the atmosphere (1bar = 1 atm = 10**5 Pa) [Pa]
+    @type theta: Float
+
+    @param theta: liquid phase (m**3/m**3 )
+    @type theta: Float
+
+    @param theta_sat: theta at saturation equal to soil porosity (m**3/m**3 )
+    @type theta_sat: Float
+
+    @param tortuosity: tortuosity (m/m)
+    @type tortuosity: Float
+    """
+    try:
+        # SLI:: cable_sli_utils.f90 L::1494: var%Dv    = Dva*parin%tortuosity*(parin%the-theta)  * ((Tsoil+Tzero)/Tzero)**1.88_r_2 ! m2 s-1
+        dv_soil_air = dv_free_air * tortuosity * (theta_sat - theta)
+
+        return dv_soil_air
 
     except ValueError as err:
         print(err)
@@ -608,7 +641,7 @@ def alpha_i_k(dv=None, dv_i=None, nK_MathieuBariac=None, nK_Brutsaert=None, rbh=
         raise NotImplementedError
 
 
-def beta_i(alpha_i, density_h2o_vapour=0.0822, density_h2o_liquide=1000.00):
+def beta_i(alpha_i, density_h2o_vapour=0.822, density_h2o_liquide=1000.00):
     """
     Calculates the factor relating liquid and vapour isotope concentration for species i (-).
 
@@ -1012,5 +1045,7 @@ def p_sat(T):
         p_sat = -4.86 + 0.855 * p_sat + 0.000244 * p_sat ** 2  # ps for ice
 
     return p_sat
+
+
 
 

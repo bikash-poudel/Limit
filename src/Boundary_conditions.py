@@ -63,7 +63,7 @@ class iso_atmosphere(BoundaryCondition):
         self.Precipitation = initial_Precipitation  # Precipitation in m3/d
         self.c_Precipitation = initial_c_Precipitation  # Dict with solutes and initial concentrations in kg/m**3 of precipitation (!!NO delta signature!!) (currently supported "2H" and/or "18O")
 
-
+    @classmethod
     def soil_surface_Rh(self, Rh_atmosphere, T_soil, T_atmosphere):
         """
         Returns the relative humidity at the soil surface

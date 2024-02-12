@@ -38,7 +38,7 @@ def main():
     print(check_stability(my_layers, my_time, flux))
 
     # Run simulations
-    C_t = iso.run_1D_model(atm, my_layers, my_time, flux, B_C, solutes=['2H'],
+    C_t = iso.run_1D_model(atm, my_layers, flux, B_C, solutes=['2H'],
                            ignore_alpha_i=ignorealphai,
                            ignore_alpha_i_k=ignorealphaik,
                            ignore_dl_i=ignoredl,

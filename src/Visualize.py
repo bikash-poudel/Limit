@@ -9,9 +9,9 @@ class Visualize(object):
         self.__layers = layers
         self.time = time
 
-    def breakthrough(self, C, solute_i, print_steps, label_time='days'):
+    def iso_breakthrough(self, C, solute_i, print_steps, label_time='days'):
 
-        time_steps = np.arange(0, self.time.time_steps) * self.time.dt * \
+        time_steps = np.arange(0, self.time.time_steps+1) * self.time.dt * \
                      self.time.total_seconds() / self.time.total_seconds_per_day()
 
         # Concentration vs time
@@ -26,12 +26,10 @@ class Visualize(object):
         ax.set_title('conc breakthrough [{}]'.format(solute_i))
         ax.legend()
 
-        # timestamp1 = datetime.now().strftime("%Y%m%d-%H%M%S")
-        # fig1.savefig( 'D:\\Isotope transport\\Scripts\\output\\{}.png'.format(timestamp1))
         plt.show()
         return ax
 
-    def profile(self, C, solute_i, print_time_steps, label_depth='m'):
+    def iso_profile(self, C, solute_i, print_time_steps, label_depth='m'):
 
         layers_center = np.array([layer.center for layer in self.__layers])
 
@@ -53,4 +51,56 @@ class Visualize(object):
         # fig2.savefig( 'D:\\Isotope transport\\Scripts\\output\\{}.png'.format(timestamp2))
         plt.show()
         return ax
+
+    def profile(self, pf, x_label='m3/d', y_label='m', label=None):
+
+        layers_center = np.array([layer.center for layer in self.__layers])
+
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+        ax.plot(pf, - layers_center, label=label)
+
+        ax.set_xlabel(x_label)
+        ax.set_ylabel('depth [{}]'.format(y_label))
+        ax.set_title('profile')
+        ax.legend() if label is not None else None
+        plt.show()
+
+        return ax
+
+    def profiles(self, pf, x_label='m3/d', y_label='m', label=None, title=None):
+
+        layers_center = np.array([layer.center for layer in self.__layers])
+
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+        for p, l in zip(pf, label):
+            ax.plot(p, - layers_center,
+                    label=l)
+
+        ax.set_xlabel(x_label)
+        ax.set_ylabel('depth [{}]'.format(y_label))
+        ax.set_title(title)
+        ax.legend() if label is not None else None
+        plt.show()
+
+        return ax
+
+    def breakthrough(self, xs, x_label='d', y_label='m3/d', label=None, title=None):
+
+        time_steps = np.arange(0, self.time.time_steps+1) * self.time.dt * \
+                     self.time.total_seconds() / self.time.total_seconds_per_day()
+
+        # Concentration vs time
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+        ax.plot(time_steps, xs, label=label)
+
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.set_title(title)
+        ax.legend() if label is not None else None
+
+        plt.show()
+        return ax
+
+
+
 

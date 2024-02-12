@@ -6,6 +6,7 @@ Created on 20.08.2023
 
 # -*- coding: utf-8 -*-
 
+from math import exp
 
 class iso_layer(object):
     """
@@ -28,7 +29,8 @@ class iso_layer(object):
                  theta_sat=0.35,  # volumetric water content m3/m3 at saturation
                  initial_T=283.15,  # soil temperature in Kelvin
                  porosity=0.35,  # porosity of the soil m3/m3
-                 tortuosity=0.67  # tortuosity of the soil m/m
+                 tortuosity=0.67,  # tortuosity of the soil m/m
+                 psi=None  # soil metric potential in [m]
                  ):
         """
         Constructor of LSI_iso_cell
@@ -48,6 +50,27 @@ class iso_layer(object):
         self.T = initial_T
         self.porosity = porosity
         self.tortuosity = tortuosity
+        self.psi = psi
+
+    @classmethod
+    def soil_relative_humidity(self, psi, T):
+        """
+        Calculates the relative humidity in the soil air space based on the temperature and the matrix potential (Psi)
+
+        @param psi: Matrix potential of the soil layer
+        @type psi: float
+
+        @param T: Temperature of the soil layer in kelvin
+        @type T: float
+        """
+        Mw = 0.018016  # molecular wt: water    (kg/mol)
+        gravity = 9.80  # gravity acceleration (m/s2)
+        R = 8.3144621  # gas constant(J/(mol*K))
+
+        hr = exp(Mw * gravity * psi / (R * T))
+
+        return hr
+
 
 
     def delta_theta(self, ql):
