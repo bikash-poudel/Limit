@@ -378,6 +378,9 @@ class liquid_diffusion(flux_connection, liquid_diffusion_base_class):
 
         return dl_mean
 
+    def calc_flux_liquid(self, Isotopologue, dl_i_formulation="Cuntz", **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, dl_i_formulation=dl_i_formulation, **kwargs)
+
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
         Positive flux of the given Isotopologue [m/day] left to right
@@ -624,6 +627,31 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
 
         return dv_i_mean
 
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+
+        T_mean = (self.left_node.T + self.right_node.T) / 2 # average tempereture between nodes
+        dT_mean = (self.left_node.dT + self.right_node.dT) / 2
+
+        alpha_i_mean = self.left_node.alpha_i(Isotopologue=Isotopologue, T=T_mean, **kwargs)
+        d_beta_mean = self.left_node.d_beta(Isotopologue=Isotopologue, T=T_mean, dT=dT_mean, **kwargs)
+
+        beta_mean = alpha_i_mean + d_beta_mean
+
+        flux = self.calc_flux(Isotopologue, **kwargs)
+        flux_v = flux * beta_mean
+
+        return flux_v
+
+    def calc_flux_liquid_2(self, Isotopologue, **kwargs):
+
+        beta_mean = (self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
+                     + self.right_node.beta(Isotopologue=Isotopologue, **kwargs)) / 2
+
+        flux = self.calc_flux(Isotopologue, **kwargs)
+        flux_v = flux * beta_mean
+
+        return flux_v
+
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
         Positive flux of the given Isotopologue [m/day] left to right
@@ -689,6 +717,9 @@ class liquid_advection(flux_connection):
         For liquid flux --> liquid flux
         """
         return self.get_flux() * 0.5  # sli_solve:L2432, dcqldca & dcqldcb = 0.5
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
@@ -788,6 +819,39 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
 
         return flux
 
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+
+        T_mean = (self.left_node.T + self.right_node.T) / 2 # average tempereture between nodes
+        dT_mean = (self.left_node.dT + self.right_node.dT) / 2
+
+        alpha_i_mean = self.left_node.alpha_i(Isotopologue=Isotopologue, T=T_mean, **kwargs)
+        d_beta_mean = self.left_node.d_beta(Isotopologue=Isotopologue, T=T_mean, dT=dT_mean, **kwargs)
+
+        beta_mean = alpha_i_mean + d_beta_mean
+
+        flux = self.get_flux()
+        # beta_rightnode = self.right_node.beta(Isotopologue=Isotopologue, **kwargs)
+        # SLI: dv = Dvs ; dv_i = Divs ; 1/b_i = alphak_vdiff
+        betaq = self.dv_i(dv=1, Isotopologue=Isotopologue, **kwargs)
+
+        flux_v = flux * betaq * beta_mean * 0.5  # sli_solve:L2439
+
+        return flux_v
+
+    def calc_flux_liquid_2(self, Isotopologue, **kwargs):
+
+        flux = self.get_flux()
+
+        beta_mean = (self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
+                     + self.right_node.beta(Isotopologue=Isotopologue, **kwargs)) / 2
+        # beta_rightnode = self.right_node.beta(Isotopologue=Isotopologue, **kwargs)
+        # SLI: dv = Dvs ; dv_i = Divs ; 1/b_i = alphak_vdiff
+        betaq = self.dv_i(dv=1, Isotopologue=Isotopologue, **kwargs)
+
+        flux_v = flux * betaq * beta_mean * 0.5  # sli_solve:L2439
+
+        return flux_v
+
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
         Positive flux of the given Isotopologue [m/day] left to right
@@ -869,6 +933,9 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         delta_c_evapout = self.delta_evapout_c_iso(Isotopologue, **kwargs)
         flux = self.q_evaporation_out * delta_c_evapout
         return flux
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
     def calc_flux_i(self, Isotopologue,formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz", **kwargs):
 
@@ -1308,6 +1375,9 @@ class transpiration(boundary_connection):
 
         return self.ql_transpiration
 
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
+
     def calc_flux_i(self, Isotopologue, **kwargs):
 
         """
@@ -1350,6 +1420,9 @@ class surface_runoff(boundary_connection):
 
         return self.q_runoff
 
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
+
     def calc_flux_i(self, Isotopologue,**kwargs):
 
         return self.calc_flux(Isotopologue=Isotopologue) * self.top_layer.get_conc_iso_liquid(Isotopologue=Isotopologue)
@@ -1389,6 +1462,9 @@ class precipitation(boundary_connection):
 
     def calc_flux(self, Isotopologue, **kwargs):
         return - self.q_prec
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
     def calc_flux_i(self, Isotopologue, **kwargs):
 
@@ -1440,6 +1516,9 @@ class aquifer_connection(boundary_connection):
             flux = self.get_flux() * 1
 
         return flux
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
     def calc_flux_i(self, Isotopologue, **kwargs):
 

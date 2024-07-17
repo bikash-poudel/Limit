@@ -15,6 +15,88 @@ import iso_fluxes
 import iso_storages
 
 
+def storage_fluxes(storage, Isotopologue, **kwargs):
+    try:
+        assert isinstance(storage, iso_storages.iso_storage)
+
+        q = 0  # sum of fluxes
+        for c in storage.connections:
+
+            flux = c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
+
+            if isinstance(c, (iso_fluxes.liquid_advection, iso_fluxes.vapor_advection)) and c.right_node is storage:
+
+                q += flux
+
+            else:
+                q -= flux
+
+    except Exception as err:
+        raise NotImplementedError("An unexpected error occurred.") from err
+
+    return q
+
+
+def right_fluxes(storage, Isotopologue, **kwargs):
+    try:
+        assert isinstance(storage, iso_storages.iso_storage)
+        s_connections = storage.connections_to_iso_storages
+
+        q = 0  # sum of fluxes
+        for c in s_connections:
+
+            if c.left_node is storage:
+                if isinstance(c, (iso_fluxes.liquid_advection, iso_fluxes.vapor_advection)):
+                    q -= c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
+                else:
+                    q += c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
+
+    except Exception as err:
+        raise NotImplementedError("An unexpected error occurred.") from err
+
+    return q
+
+
+def left_fluxes(storage, Isotopologue, **kwargs):
+    try:
+        assert isinstance(storage, iso_storages.iso_storage)
+        s_connections = storage.connections_to_iso_storages
+
+        q = 0  # sum of fluxes
+        for c in s_connections:
+
+            if c.right_node is storage:
+                q += c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
+
+    except Exception as err:
+        raise NotImplementedError("An unexpected error occurred.") from err
+
+    return q
+
+
+def i_fluxes(storage, Isotopologue, **kwargs):
+    try:
+        assert isinstance(storage, iso_storages.iso_storage)
+        s_connections = storage.connections
+
+        qi = 0  # sum of all iso_fluxes
+        for c in s_connections:
+
+            flux_i = c.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
+
+            if isinstance(c, iso_fluxes.boundary_connection) or c.left_node is storage:
+
+                qi += flux_i
+
+            else:
+                qi -= flux_i
+
+    except Exception as err:
+        raise NotImplementedError("An unexpected error occurred.") from err
+
+    return qi
+
+
 class iso_project(object):
     """
     Layer storing isotopes
@@ -95,79 +177,26 @@ class iso_project(object):
         bot_boundary = storages[-1]
         for i_storage in storages:
 
-            storage_index = storages.index(i_storage)
+            s_index = storages.index(i_storage)
 
-            storage_volume = i_storage.get_eff_liquid_volume(Isotopologue=Isotopologue, **kwargs)
-            i_storage_volume = i_storage.get_storage_i(Isotopologue=Isotopologue,
-                                                       delta_cv=delta_cv[storage_index],
-                                                       deltaS_liq=deltaS_liq[storage_index],
-                                                       **kwargs)
-
-            left_c_diff_fluxes_to_left, left_c_diff_fluxes_to_right, \
-                left_c_adv_fluxes_to_left, left_c_adv_fluxes_to_right = 0, 0, 0, 0
-            right_c_diff_fluxes_to_left, right_c_diff_fluxes_to_right, \
-                right_c_adv_fluxes_to_left, right_c_adv_fluxes_to_right = 0, 0, 0, 0
-            left_fluxes_i, right_fluxes_i = 0, 0
-            boundary_fluxes, boundary_fluxes_i = 0, 0
-
-            # Boundary Connections to each storage
-            for boundary_connection in i_storage.connections_to_boundaries:
-                if not isinstance(boundary_connection, iso_fluxes.precipitation):
-                    # sli.solve.f90: L2521
-                    boundary_fluxes += boundary_connection.calc_flux(Isotopologue=Isotopologue, **kwargs)
-                boundary_fluxes_i += boundary_connection.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
-
-            # Two-way fluxes in left connections
-            for l_connection in i_storage.connections_to_left:
-                left_fluxes_i += l_connection.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
-
-                try:
-                    # For diffusive fluxes in left connection
-                    if isinstance(l_connection, iso_fluxes.vapor_diffusion) or \
-                            isinstance(l_connection, iso_fluxes.liquid_diffusion):
-
-                        left_c_diff_fluxes_to_left += l_connection.flux_to_left(Isotopologue=Isotopologue, **kwargs)
-                        left_c_diff_fluxes_to_right += l_connection.flux_to_right(Isotopologue=Isotopologue, **kwargs)
-
-                    # For advective fluxes in left connection
-                    else:
-                        left_c_adv_fluxes_to_left += l_connection.flux_to_left(Isotopologue=Isotopologue, **kwargs)
-                        left_c_adv_fluxes_to_right += l_connection.flux_to_right(Isotopologue=Isotopologue, **kwargs)
-
-                except Exception as err:
-                    raise NotImplementedError("An unexpected error occurred.") from err
-
-            # Two-way fluxes in right connections
-            for r_connection in i_storage.connections_to_right:
-                right_fluxes_i += r_connection.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
-
-                try:
-                    # For diffusive fluxes in right connection
-                    if isinstance(r_connection, iso_fluxes.vapor_diffusion) or \
-                            isinstance(r_connection, iso_fluxes.liquid_diffusion):
-
-                        right_c_diff_fluxes_to_left += r_connection.flux_to_left(Isotopologue=Isotopologue, **kwargs)
-                        right_c_diff_fluxes_to_right += r_connection.flux_to_right(Isotopologue=Isotopologue, **kwargs)
-                    # For advective fluxes in right connection
-                    else:
-                        right_c_adv_fluxes_to_left += r_connection.flux_to_left(Isotopologue=Isotopologue, **kwargs)
-                        right_c_adv_fluxes_to_right += r_connection.flux_to_right(Isotopologue=Isotopologue, **kwargs)
-
-                except Exception as err:
-                    raise NotImplementedError("An unexpected error occurred.") from err
-
-            matrix_A[storage_index, storage_index] = - storage_volume / delta_time - boundary_fluxes \
-                                                     + left_c_adv_fluxes_to_right - right_c_adv_fluxes_to_left \
-                                                     - left_c_diff_fluxes_to_right - right_c_diff_fluxes_to_left
+            matrix_A[s_index, s_index] = - i_storage.get_eff_liquid_volume(Isotopologue=Isotopologue,
+                                                                           **kwargs) / delta_time \
+                                         + storage_fluxes(i_storage, Isotopologue=Isotopologue, **kwargs)
 
             if i_storage is not top_boundary:
-                matrix_A[storage_index, storage_index - 1] = left_c_adv_fluxes_to_left + left_c_diff_fluxes_to_left
-
+                matrix_A[s_index, s_index - 1] = left_fluxes(storage=i_storage,
+                                                             Isotopologue=Isotopologue,
+                                                             **kwargs)
             if i_storage is not bot_boundary:
-                matrix_A[storage_index, storage_index + 1] = - right_c_adv_fluxes_to_right \
-                                                             + right_c_diff_fluxes_to_right
+                matrix_A[s_index, s_index + 1] = right_fluxes(storage=i_storage,
+                                                              Isotopologue=Isotopologue,
+                                                              **kwargs)
 
-            matrix_B[storage_index] = i_storage_volume / delta_time + boundary_fluxes_i - left_fluxes_i + right_fluxes_i
+            matrix_B[s_index] = i_storage.get_storage_i(Isotopologue=Isotopologue,
+                                                        delta_cv=delta_cv[s_index],
+                                                        deltaS_liq=deltaS_liq[s_index],
+                                                        **kwargs) / delta_time \
+                                + i_fluxes(storage=i_storage, Isotopologue=Isotopologue, **kwargs)
 
         a = matrix_A.tocsr()
         b = matrix_B
@@ -176,22 +205,4 @@ class iso_project(object):
 
         return delta_c
 
-    """
-    def mass_balance(self, Isotopologue, delta_time, delta_c, **kwargs):
 
-        storages = list(self.get_iso_storages())
-
-        i_storage = storages[0]
-        storage_index = storages.index(storage)
-        delta_storage = storage.thetasat * storage.thickness / delta_time * \
-                        (delta_c[storage_index] * storage.eff_saturation(Isotopologue, **kwargs))
-
-        # Boundary Connections to each storage
-        for boundary_connection in storage.connections_to_boundaries:
-            if not isinstance(boundary_connection, iso_fluxes.precipitation):
-                # sli.solve.f90: L2521
-                boundary_fluxes += boundary_connection.calc_flux(Isotopologue=Isotopologue, **kwargs)
-            boundary_fluxes_i += boundary_connection.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
-        #delta_fluxes =
-        
-    """

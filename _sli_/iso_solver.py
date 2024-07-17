@@ -148,70 +148,73 @@ def update_boundaries(c, sli, dt):
     return c
 
 
+def iso_solve(sli, solute, **ignore):
+
+    atm = _atm(sli)  # atmosphere
+    p = iso_project.iso_project()  # create a project
+    p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
+
+    c = p.get_cells()[0]
+    _layers(c, sli)  # add soil layers to the new cell
+    c.install_connections()  # flux connections between the layers
+
+    pd = iso_storages.iso_pond()
+    #c.add_pond(pd)
+
+    #boundary connections
+    c.add_evaporation()
+    c.add_transpiration()
+    c.add_surface_runoff()
+    c.add_precipitation()
+
+    aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # aquifer as boundary isotope storage
+    c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
+
+    c2H_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c.conc_2H]
+    c18O_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c.conc_18O]
+
+    ## initialize ##
+    c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
+    c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
+
+    for dt in range(len(sli.get_in_soil())):
+
+        #dt = len(sli.get_in_soil()) - 1
+        print(dt)
+
+        delta_t = sli.dt(dt)
+
+        # update storage states and boundaries to current time
+        update_storages(c, sli, dt)
+        update_boundaries(c, sli, dt)
+        #c.update_c_layers(conc_iso=sli.ciso(dt)[1:], Isotopologue=solute)
+
+        current_c_2H = c.conc_2H
+        current_c_18O = c.conc_18O
+
+        dc_18O = p.run(Isotopologue=solute,
+                       delta_time=delta_t,
+                       delta_cv=sli.deltacv(dt),
+                       deltaS_liq=sli.deltaSliq(dt),
+                       **ignore)
+
+        c18O = list(np.array(current_c_18O) + np.array(dc_18O))
+        cdelta_18O = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c18O]
+
+        c.update_c_layers(conc_iso=c18O, Isotopologue=solute)
+
+        c_iso[solute].append(c18O)
+        c_iso_delta[solute].append(cdelta_18O)
+
+    return c_iso, c_iso_delta
+
+
 ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True, 'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
 
 pth = os.getcwd()
-sli = Sli.SlI(pth + '/sli_label3/iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
+path = os.path.abspath(os.path.join(pth, "..", ".."))
 
-solute = '18O'  #len(sli.get_in_soil())-1
+sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
 
-atm = _atm(sli)  # atmosphere
-p = iso_project.iso_project()  # create a project
-p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
-
-c = p.get_cells()[0]
-_layers(c, sli)  # add soil layers to the new cell
-c.install_connections()  # flux connections between the layers
-
-pd = iso_storages.iso_pond()
-#c.add_pond(pd)
-
-#boundary connections
-c.add_evaporation()
-c.add_transpiration()
-c.add_surface_runoff()
-c.add_precipitation()
-
-aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # aquifer as boundary isotope storage
-c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
-
-c2H_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c.conc_2H]
-c18O_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c.conc_18O]
-
-## initialize ##
-c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
-c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
-
-for dt in range(len(sli.get_in_soil())):
-
-    #dt = len(sli.get_in_soil()) - 1
-    print(dt)
-
-    delta_t = sli.dt(dt)
-
-    # update storage states and boundaries to current time
-    update_storages(c, sli, dt)
-    update_boundaries(c, sli, dt)
-    #c.update_c_layers(conc_iso=sli.ciso(dt)[1:], Isotopologue=solute)
-
-    current_c_2H = c.conc_2H
-    current_c_18O = c.conc_18O
-
-    dc_18O = p.run(Isotopologue=solute,
-                   delta_time=delta_t,
-                   delta_cv=sli.deltacv(dt),
-                   deltaS_liq=sli.deltaSliq(dt),
-                   **ignore)
-
-    c18O = list(np.array(current_c_18O) + np.array(dc_18O))
-    #current_dc = np.array([mpf(x) for x in dc_18O])
-    #current_c = np.array([mpf(x) for x in current_c_18O])
-    #c18O = current_c + current_dc
-
-    cdelta_18O = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c18O]
-
-    c.update_c_layers(conc_iso=c18O, Isotopologue=solute)
-
-    c_iso[solute].append(c18O)
-    c_iso_delta[solute].append(cdelta_18O)
-
+solute = '18O'
+conc, c_delta = iso_solve(sli, solute='18O', **ignore)

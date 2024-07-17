@@ -756,23 +756,14 @@ def solve_iso(sli, dt):
     return [Ciso, c_delta]
 
 
-def mass_balance(sli, dt, dc):
-    
-    for l in range(sli.n(dt)):
-        
-        
-        
-        pass
-        
-    
-    
-        
-    
+def mass_balance(sli, dt, dc):  
+          
+        pass 
 
+pth = os.getcwd()
+path = os.path.abspath(os.path.join(pth, "..", ".."))
 
-path = os.getcwd() + '/sli_label3'
-#sli = SlI(pth + '/sli_label3/iso_variables')  # imports all the variable files
-sli = Sli.SlI(path + '/iso_variables')  # imports all the variable files /iso_variable for sig=0.5, /iso_variables for sig=1
+sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
 dciso = []
 ciso = []
 cdelta = []
