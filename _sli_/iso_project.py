@@ -205,4 +205,30 @@ class iso_project(object):
 
         return delta_c
 
+    def mass_balance(self, Isotopologue, **kwargs):
+        """"Returns the total mass [kg] of Isotopologue in the system"""
+
+        m = self.storage_mass(Isotopologue=Isotopologue) + self.mass_flux(Isotopologue=Isotopologue, **kwargs)
+        return m
+
+    def storage_mass(self, Isotopologue):
+        """"Returns the total mass in [kg] of given Isotopologue in the cell"""
+
+        storage_mass = [l.get_conc_iso_liquid(Isotopologue=Isotopologue) * l.thickness * l.theta
+                        for l in self.__cells[0].layers]  # kg m-3 * m2 * m * theta
+        total_mass = sum(np.array(storage_mass))  # kg
+
+        return total_mass
+
+    def mass_flux(self, Isotopologue, **kwargs):
+
+        """"Returns the net mass flux [kg s-1] leaving the cell"""
+
+        connections = self.__cells[0].boundary_connections
+        q = 0
+        for c in connections:
+
+            q += c.calc_flux_i(Isotopologue=Isotopologue, **kwargs)  # kg s-1
+
+        return q
 

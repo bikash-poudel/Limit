@@ -158,7 +158,7 @@ def iso_solve(sli, solute, **ignore):
     _layers(c, sli)  # add soil layers to the new cell
     c.install_connections()  # flux connections between the layers
 
-    pd = iso_storages.iso_pond()
+    #pd = iso_storages.iso_pond()
     #c.add_pond(pd)
 
     #boundary connections
@@ -176,7 +176,7 @@ def iso_solve(sli, solute, **ignore):
     ## initialize ##
     c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
     c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
-
+    mass_balance = []
     for dt in range(len(sli.get_in_soil())):
 
         #dt = len(sli.get_in_soil()) - 1
@@ -201,12 +201,15 @@ def iso_solve(sli, solute, **ignore):
         c18O = list(np.array(current_c_18O) + np.array(dc_18O))
         cdelta_18O = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c18O]
 
+        mass = p.mass_balance(Isotopologue=solute, **ignore)
+
         c.update_c_layers(conc_iso=c18O, Isotopologue=solute)
 
         c_iso[solute].append(c18O)
         c_iso_delta[solute].append(cdelta_18O)
+        mass_balance.append(mass)
 
-    return c_iso, c_iso_delta
+    return c_iso, c_iso_delta, mass_balance
 
 
 ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True, 'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
@@ -217,4 +220,5 @@ path = os.path.abspath(os.path.join(pth, "..", ".."))
 sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
 
 solute = '18O'
-conc, c_delta = iso_solve(sli, solute='18O', **ignore)
+c, d, m = iso_solve(sli, solute='18O', **ignore)
+

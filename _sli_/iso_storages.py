@@ -479,8 +479,6 @@ class iso_storage(flux_node):
         self.__cell = None
         self.upper_boundary = upper_boundary
         self.lower_boundary = lower_boundary
-        # assert (isinstance(new_layer, Point)), "the center of a layer must be an instance of LSI_Storages.Point"
-        #self.center = None  #(upper_boundary + lower_boundary) / 2
         self.thickness = lower_boundary - upper_boundary
         self.theta = theta
         self.theta_sat = theta_sat
@@ -490,7 +488,6 @@ class iso_storage(flux_node):
         self.rH = rH
         self.psi = psi
         self.pond = None
-        self.flux_connections = []
 
     """Properties"""
 

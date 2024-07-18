@@ -50,9 +50,8 @@ class flux_connection(object):
 
             self.__ID = self.__class__.current_ID
             self.__class__.current_ID += 1  # increment the current ID for the next flux node to be created
-            self.__class__.Dict_of_all_flux_connections[
-                self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
-
+            # add Instance of flux node to Dict_of_all_flux_nodes
+            self.__class__.Dict_of_all_flux_connections[self.__ID] = self
             self.__left_node = left_node
             self.__right_node = right_node
             # self.__flux_crosssectional_area = flux_crosssectional_area
@@ -106,7 +105,6 @@ class flux_connection(object):
         totalseconds_per_day = 86400  # 24* 60 * 60
 
         return  # self.calc_flux_i(Isotopologue) * self.flux_crosssectional_area *.total_seconds() / totalseconds_per_day
-
 
     def is_node(self, node):
         """

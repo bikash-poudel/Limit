@@ -40,7 +40,7 @@ class iso_cell(object):
 
         self.__ID = self.__class__.current_ID
         self.__class__.current_ID += 1  # increment the current ID for the next flux node to be created
-        # self.__class__.Dict_of_all_cells[ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
+        #self.__class__.Dict_of_all_cells[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
 
         assert (isinstance(location, iso_storages.Point)), "The surface center of a cell must be an instance of " \
                                                            "iso_Storages.Point"
@@ -376,22 +376,18 @@ class iso_cell(object):
         """
 
         try:
-            l_D, v_D, l_adv, v_adv = [], [], [], []
             for left_node, right_node in zip(self.layers[:-1], self.layers[1:]):
 
                 # Define connections and assign to each layers
                 if liquid_diffusion:
                     lD = iso_fluxes.liquid_diffusion(left_node=left_node, right_node=right_node)
                     self.__connection_l_diff.append(lD)
-
                 if vapor_diffusion:
                     vD = iso_fluxes.vapor_diffusion(left_node=left_node, right_node=right_node)
                     self.__connection_v_diff.append(vD)
-
                 if liquid_advection:
                     ladv = iso_fluxes.liquid_advection(left_node=left_node, right_node=right_node)
                     self.__connection_l_adv.append(ladv)
-
                 if vapor_advection:
                     vadv = iso_fluxes.vapor_advection(left_node=left_node, right_node=right_node)
                     self.__connection_v_adv.append(vadv)
