@@ -201,7 +201,7 @@ def iso_solve(sli, solute, **ignore):
         c18O = list(np.array(current_c_18O) + np.array(dc_18O))
         cdelta_18O = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c18O]
 
-        mass = p.mass_balance(Isotopologue=solute, **ignore)
+        mass = p.mass_balance(Isotopologue=solute, dt=delta_t, **ignore)
 
         c.update_c_layers(conc_iso=c18O, Isotopologue=solute)
 
