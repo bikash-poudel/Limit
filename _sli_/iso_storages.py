@@ -537,14 +537,14 @@ class iso_storage(flux_node):
         """
         @return: Returns the effective volume of the storage filled with liquids  in m3.
         """
-        return self.eff_saturation(Isotopologue=Isotopologue, **kwargs) * self.theta_sat * self.thickness
+        return self.eff_saturation(Isotopologue=Isotopologue, **kwargs) * (self.theta_sat - self.theta_0) * self.thickness
 
     def get_liquid_volume(self):
 
         """
         @return: Returns the effective volume of the storage filled with liquids  in m3.
         """
-        return self.theta_sat * self.thickness
+        return (self.theta_sat - self.theta_0) * self.thickness
 
     def get_saturation(self):
 
