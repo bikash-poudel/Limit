@@ -47,7 +47,7 @@ def main():
 
     # Simulation Period
     start = cmf.Time(1, 1, 2020)
-    end = start + timedelta(days=200)  # run cmf for 300 days
+    end = start + timedelta(days=50)  # run cmf for 300 days
     dt = cmf.h  # time step
 
     # Define solver

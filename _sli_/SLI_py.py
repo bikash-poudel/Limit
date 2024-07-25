@@ -692,19 +692,7 @@ def solve_iso(sli, dt):
                 - Dl_mean[l - 1] / sli.deltaz(dt)[l - 1] / sig * (sli.ciso(dt)[l] - sli.ciso(dt)[l + 1]) \
                 - Dv_mean[l - 1] / sli.deltaz(dt)[l - 1] / sig * (
                             sli.ciso(dt)[l] * Beta[l - 1] - sli.ciso(dt)[l + 1] * Beta[l]) \
-                + sli.qex(dt)[l] * sli.ciso(dt)[l + 1] / sig
-
-            d1 = sli.thetasat(dt)[l] * sli.dx(dt)[l] / sig / sli.dt(dt) \
-                * (sli.ciso(dt)[l + 1] * deltaSeff[l] + sli.cisoice(dt)[l + 1] * sli.deltaSice(dt)[l])
-            d2 = - sli.qlsig(dt)[l] * cql[l - 1] / sig
-            d3 = - sli.qvsig(dt)[l] * betaqv[l - 1] * cqv[l - 1] / sig
-            d4 = - Dl_mean[l - 1] / sli.deltaz(dt)[l - 1] / sig * (sli.ciso(dt)[l] - sli.ciso(dt)[l + 1])
-            d5 = - Dv_mean[l - 1] / sli.deltaz(dt)[l - 1] / sig * (
-                            sli.ciso(dt)[l] * Beta[l - 1] - sli.ciso(dt)[l + 1] * Beta[l]) 
-            d6 = sli.qex(dt)[l] * sli.ciso(dt)[l + 1] / sig
-            d7 =  sli.qlsig(dt)[l + 1] * cql[l] / sig
-        
-            dsum = d1 + d2 + d3 + d4 + d5 + d6 + d7           
+                + sli.qex(dt)[l] * sli.ciso(dt)[l + 1] / sig         
             
             aa.append(a), bb.append(b), cc.append(0), dd.append(d)
 
@@ -756,10 +744,6 @@ def solve_iso(sli, dt):
     return [Ciso, c_delta]
 
 
-def mass_balance(sli, dt, dc):  
-          
-        pass 
-
 pth = os.getcwd()
 path = os.path.abspath(os.path.join(pth, "..", ".."))
 
@@ -770,6 +754,7 @@ cdelta = []
 for dt in range(len(sli.get_in_soil())):
     
     print(dt)
+   
     c, d = solve_iso(sli, dt)
     #print(c.tolist())
     dciso.append(d)

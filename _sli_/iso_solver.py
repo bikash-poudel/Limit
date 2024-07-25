@@ -16,12 +16,11 @@ import iso_fluxes
 
 
 def _layers(c, sli):
-
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     dt = 0  # initial states
     lower_boundaries = np.cumsum(sli.dx(dt))
-    init_c_iso = sli.ciso(dt)[1:] # ignoring the litter layer concentration
+    init_c_iso = sli.ciso(dt)[1:]  # ignoring the litter layer concentration
     theta = sli.theta(dt)
     theta_r = sli.thetar(dt)
     theta_sat = sli.thetasat(dt)
@@ -33,7 +32,7 @@ def _layers(c, sli):
 
     id = 0
     upper_boundary = 0
-    for lower_boundary, ciso, th, tr, tsat, tor, T, d_T, r_H, PSI in\
+    for lower_boundary, ciso, th, tr, tsat, tor, T, d_T, r_H, PSI in \
             zip(lower_boundaries, init_c_iso, theta, theta_r, theta_sat, tortuosity, T_soil, dT, rH, psi):
         new_layer = iso_storages.iso_soil_layer(ID=id,
                                                 upper_boundary=upper_boundary,
@@ -43,7 +42,7 @@ def _layers(c, sli):
                                                 theta_0=tr,
                                                 theta_sat=tsat,
                                                 tortuosity=tor,
-                                                T=T+ Tzero_sli,
+                                                T=T + Tzero_sli,
                                                 dT=d_T,
                                                 rH=r_H,
                                                 psi=PSI
@@ -56,7 +55,6 @@ def _layers(c, sli):
 
 
 def _atm(sli):
-
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     dt = 0  # initial states
@@ -67,20 +65,21 @@ def _atm(sli):
     c_iso_atm = sli.civa(dt) / sli.cva(dt)
     wind_speed = sli.wind_speed(dt)
 
-    atm = iso_storages.iso_atmosphere(conc_iso_liquid={"2H":1.0, "18O":1.0},conc_iso_vapor={"2H":1.0, "18O":c_iso_atm},
+    atm = iso_storages.iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                                      conc_iso_vapor={"2H": 1.0, "18O": c_iso_atm},
                                       T=Tatm, Rh_atmosphere=Rh_atm,
                                       Pa_atmosphere=patm,
                                       wind_speed=wind_speed,
                                       hc=10,  # canopy height [m] (e.g. 40)
                                       d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
-                                      z0m=0.1 * 10,# roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
+                                      z0m=0.1 * 10,
+                                      # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
                                       LAI=1.1,  # leaf area index (e.g. 2.0)
                                       extku=1.5)
     return atm
 
 
 def update_storages(c, sli, dt):
-
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     # atmospheric variables
@@ -101,14 +100,13 @@ def update_storages(c, sli, dt):
 
     # boundary storage
     h0 = sli.pond_height(dt)
-    #c.update_pond(pond_height=h0)
+    # c.update_pond(pond_height=h0)
 
     c_aquifer = sli.cali(dt)
     c.update_aquifer(c_iso={"2H": 1.0, "18O": c_aquifer})
 
 
 def update_boundaries(c, sli, dt):
-
     # Update states and fluxes for
 
     # c: cell
@@ -120,7 +118,7 @@ def update_boundaries(c, sli, dt):
     c_prec = sli.cprec(dt)
     c.update_precipitation(q_prec=q_prec, c_prec={"2H": 1.0, "18O": c_prec})
 
-    #runoff
+    # runoff
     qrunoff = sli.qrunoff(dt)
     c.update_runoff(q_runoff=qrunoff)
 
@@ -149,7 +147,6 @@ def update_boundaries(c, sli, dt):
 
 
 def iso_solve(sli, solute, **ignore):
-
     atm = _atm(sli)  # atmosphere
     p = iso_project.iso_project()  # create a project
     p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
@@ -158,10 +155,10 @@ def iso_solve(sli, solute, **ignore):
     _layers(c, sli)  # add soil layers to the new cell
     c.install_connections()  # flux connections between the layers
 
-    #pd = iso_storages.iso_pond()
-    #c.add_pond(pd)
+    # pd = iso_storages.iso_pond()
+    # c.add_pond(pd)
 
-    #boundary connections
+    # boundary connections
     c.add_evaporation()
     c.add_transpiration()
     c.add_surface_runoff()
@@ -176,10 +173,9 @@ def iso_solve(sli, solute, **ignore):
     ## initialize ##
     c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
     c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
-    mass_balance = []
-    for dt in range(len(sli.get_in_soil())):
 
-        #dt = len(sli.get_in_soil()) - 1
+    for dt in range(len(sli.get_in_soil())):
+        # dt = len(sli.get_in_soil()) - 1
         print(dt)
 
         delta_t = sli.dt(dt)
@@ -187,7 +183,7 @@ def iso_solve(sli, solute, **ignore):
         # update storage states and boundaries to current time
         update_storages(c, sli, dt)
         update_boundaries(c, sli, dt)
-        #c.update_c_layers(conc_iso=sli.ciso(dt)[1:], Isotopologue=solute)
+        # c.update_c_layers(conc_iso=sli.ciso(dt)[1:], Isotopologue=solute)
 
         current_c_2H = c.conc_2H
         current_c_18O = c.conc_18O
@@ -201,24 +197,24 @@ def iso_solve(sli, solute, **ignore):
         c18O = list(np.array(current_c_18O) + np.array(dc_18O))
         cdelta_18O = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c18O]
 
-        mass = p.mass_balance(Isotopologue=solute, dt=delta_t, **ignore)
-
         c.update_c_layers(conc_iso=c18O, Isotopologue=solute)
 
         c_iso[solute].append(c18O)
         c_iso_delta[solute].append(cdelta_18O)
-        mass_balance.append(mass)
 
-    return c_iso, c_iso_delta, mass_balance
+    return c_iso, c_iso_delta
 
 
-ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True, 'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
+ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True,
+          'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
 
 pth = os.getcwd()
 path = os.path.abspath(os.path.join(pth, "..", ".."))
 
-sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
+sli = Sli.SlI(
+    path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
 
 solute = '18O'
-c, d, m = iso_solve(sli, solute='18O', **ignore)
+c, d = iso_solve(sli, solute='18O', **ignore)
+
 

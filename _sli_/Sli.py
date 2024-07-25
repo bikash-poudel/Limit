@@ -216,6 +216,10 @@ class SlI:
     def wind_speed(self, time):
         return float(self.in_parameter(time)[179])
 
+    def time_step(self, time):
+        return float(self.in_parameter(time)[180])
+
+
     ###### in iso ######
     def get_in_iso(self):
         return self.__in_iso

@@ -998,7 +998,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
     def get_evap_outflux(self):
 
-        """Evaporation flux entering soil"""
+        """Evaporation flux leaving soil"""
 
         # sli_main.f90: L359 / rbh in sli_solve.f90:L2392
 

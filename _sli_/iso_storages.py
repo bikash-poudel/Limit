@@ -632,7 +632,8 @@ class iso_storage(flux_node):
             if s_liq < 1:
                 beta = self.beta(Isotopologue=Isotopologue, **kwargs)
 
-                eff_S = self.Sl + self.cv * beta - self.cv * s_liq * beta + (self.theta_0 / self.theta_sat)
+                eff_S = self.Sl + self.cv * beta - self.cv * s_liq * beta \
+                        + (self.theta_0 / self.theta_sat)
             else:
                 eff_S = self.Sl + self.theta_0 / self.theta_sat
 
@@ -1104,3 +1105,4 @@ class Point(object):
             return self
         else:
             raise TypeError('Point must be divided with a number')
+
