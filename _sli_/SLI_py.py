@@ -192,19 +192,23 @@ def dv(T=283.15, Pa=10 ** 5):
         raise NotImplementedError
 
 
-def n_k(thetasat, S, ignore_dv_i=False):
+def n_k(thetasat, S):
     ## Different formulation in SLI: Appendix : B.7
-    if ignore_dv_i:
-        nk = ((thetasat * min(S, 1) - 0) * 0.5 + (thetasat * (1 - min(S, 1)))) \
-             / (thetasat - 0)
-    else:
-        nk = 1
+    
+    # Testcase 7 or 8, nk=1
+    nk = ((thetasat * min(S, 1) - 0) * 0.5 + (thetasat * (1 - min(S, 1)))) \
+            / (thetasat - 0)
 
     return nk
+    
 
-
-def alpha_k(dvs, divs, nk):
-    alphak = 1 / ((dvs / divs) ** nk)
+def alpha_k(dvs, divs, nk, ignore_alpha_k=True):
+    
+    if ignore_alpha_k:
+        alphak = 1
+    else:
+        
+        alphak = 1 / ((dvs / divs) ** nk)
 
     return alphak
 
@@ -387,7 +391,7 @@ def concentration_to_ratio(c_solutes_i, solute_i, M_w=0.018, M_i={"2H": 0.019, "
 
     SLI: sli_init.f90 Lines: 115 -142 <--checked and own implementation is okay
     """
-    M_w = 1.7999999225139618E-002  # Value from SLI due to floating point error
+    #M_w = 1.7999999225139618E-002  # Value from SLI due to floating point error
     R_i = c_solutes_i / (density_H2O * M_i[solute_i] / M_w)
 
     return R_i
@@ -415,12 +419,12 @@ def concentration_to_delta(c_solute_i, solute_i, R_ref={"2H": 0.00015576, "18O":
     return delta_i
 
 
-def solve_iso(sli, dt):
+def solve_iso(sli, dt, ignore):
 
     
     ###### Soil Littre iso: SUBROUTINE (isotope_vap)
 
-    ignorealphai, ignorealphaik, ignoredl, ignoredvi = True, True, True, True
+    ignorealphai, ignorealphaik, ignoredl, ignoredvi = ignore
     solute = '18O' #len(sli.get_in_soil())-1
 
     sig = sli.sig(dt)
@@ -503,14 +507,10 @@ def solve_iso(sli, dt):
         if l == 0:  # 1st layer,  Sli: checked            
                 
             ## diffusional fractionation factor in air
-            nk = n_k(sli.thetasat(dt)[l], S, ignore_dv_i=ignoredvi)
+            nk = n_k(sli.thetasat(dt)[l], S)
             Divs = dv_i(sli.Ts(dt) + Tzero_sli, solute, Pa=patm, ignore_dv_i=ignoredvi)
             Dvs = dv(sli.Ts(dt) + Tzero_sli, Pa=patm)
-            alphak = alpha_k(Dvs, Divs, nk)
-            if sli.testcase(dt) =='1':
-                alphak = 1                
-            else:                
-               pass
+            alphak = alpha_k(Dvs, Divs, nk, ignore_alpha_k=ignorealphaik)           
 
             ## Upper boundary condition
             cvs = sli.cva(dt) + sli.qevap(dt) * (sli.ram(dt) + sli.rbh(dt))  # Sli: checked
@@ -604,7 +604,7 @@ def solve_iso(sli, dt):
         # # Coefficient of tridiagonal matrix
         if l == 0:  # first layer
 
-            b = - Seff[0] * sli.thetasat(dt)[0] * sli.dx(dt)[0] / sig / sli.dt(dt) \
+            b = - Seff[0] * (sli.thetasat(dt)[0] - sli.thetar(dt)[0]) * sli.dx(dt)[0] / sig / sli.dt(dt) \
                 - qevapout * dcevapoutdciso \
                 - sli.qlsig(dt)[1] * dcqldca[0] - sli.qvsig(dt)[1] * betaqv[0] * dcqvdca[0]  \
                 - sli.qvsig(dt)[1] * dbetaqv[0] * Dv_mean[0] \
@@ -617,7 +617,7 @@ def solve_iso(sli, dt):
                 + Dl_mean[0] / sli.deltaz(dt)[0] \
                 + Dv_mean[0] / sli.deltaz(dt)[0] * Beta[1]
 
-            d = sli.thetasat(dt)[0] * sli.dx(dt)[0] / sig / sli.dt(dt) \
+            d = (sli.thetasat(dt)[0] - sli.thetar(dt)[0]) * sli.dx(dt)[0] / sig / sli.dt(dt) \
                 * (sli.ciso(dt)[1] * deltaSeff[0] + sli.cisoice(dt)[1] * sli.deltaSice(dt)[0]) \
                 - sli.qprec(dt) * sli.cprec(dt) / sig - qevapin * cevapin / sig \
                 + qevapout * cevapout / sig \
@@ -636,7 +636,7 @@ def solve_iso(sli, dt):
                 + sli.qvsig(dt)[l] * dbetaqv[l - 1] * dcqvdca[l - 1] * Dv_mean[l - 1] \
                 + Dl_mean[l - 1] / sli.deltaz(dt)[l - 1] + Dv_mean[l - 1] / sli.deltaz(dt)[l - 1] * Beta[l - 1]
 
-            b = - Seff[l] * sli.thetasat(dt)[l] * sli.dx(dt)[l] / sig / sli.dt(dt) \
+            b = - Seff[l] * (sli.thetasat(dt)[l] - sli.thetar(dt)[l]) * sli.dx(dt)[l] / sig / sli.dt(dt) \
                 + sli.qlsig(dt)[l] * dcqldcb[l - 1] + sli.qvsig(dt)[l] * betaqv[l - 1] * dcqvdcb[l - 1] \
                 + sli.qvsig(dt)[l] * dbetaqv[l - 1] * dcqvdcb[l - 1] * Dv_mean[l - 1] \
                 - sli.qlsig(dt)[l + 1] * dcqldca[l] - sli.qvsig(dt)[l + 1] * betaqv[l] * dcqvdca[l] \
@@ -650,7 +650,7 @@ def solve_iso(sli, dt):
                 + Dl_mean[l] / sli.deltaz(dt)[l] \
                 + Dv_mean[l] / sli.deltaz(dt)[l] * Beta[l + 1]
 
-            d = sli.thetasat(dt)[l] * sli.dx(dt)[l] / sig / sli.dt(dt) \
+            d = (sli.thetasat(dt)[l] - sli.thetar(dt)[l]) * sli.dx(dt)[l] / sig / sli.dt(dt) \
                 * (sli.ciso(dt)[l + 1] * deltaSeff[l] + sli.cisoice(dt)[l + 1] * sli.deltaSice(dt)[l]) \
                 - sli.qlsig(dt)[l] * cql[l - 1] / sig \
                 - sli.qvsig(dt)[l] * betaqv[l - 1] * cqv[l - 1] / sig \
@@ -675,7 +675,7 @@ def solve_iso(sli, dt):
                 + sli.qvsig(dt)[l] * dbetaqv[l - 1] * dcqvdca[l - 1] * Dv_mean[l - 1] \
                 + Dl_mean[l - 1] / sli.deltaz(dt)[l - 1] + Dv_mean[l - 1] / sli.deltaz(dt)[l - 1] * Beta[l - 1]
 
-            b = - Seff[l] * sli.thetasat(dt)[l] * sli.dx(dt)[l] / sig / sli.dt(dt) \
+            b = - Seff[l] * (sli.thetasat(dt)[l]  - sli.thetar(dt)[l]) * sli.dx(dt)[l] / sig / sli.dt(dt) \
                 + sli.qlsig(dt)[l] * dcqldcb[l - 1] + sli.qvsig(dt)[l] * betaqv[l - 1] * dcqvdcb[l - 1] \
                 + sli.qvsig(dt)[l] * dbetaqv[l - 1] * dcqvdcb[l - 1] * Dv_mean[l - 1] \
                 - sli.qlsig(dt)[l + 1] * dcqldca[l] \
@@ -683,7 +683,7 @@ def solve_iso(sli, dt):
                 - Dv_mean[l - 1] / sli.deltaz(dt)[l - 1] * Beta[l] \
                 - sli.qex(dt)[l]
 
-            d = sli.thetasat(dt)[l] * sli.dx(dt)[l] / sig / sli.dt(dt) \
+            d = (sli.thetasat(dt)[l] - sli.thetar(dt)[l]) * sli.dx(dt)[l] / sig / sli.dt(dt) \
                 * (sli.ciso(dt)[l + 1] * deltaSeff[l] + sli.cisoice(dt)[l + 1] * sli.deltaSice(dt)[l]) \
                 - sli.qlsig(dt)[l] * cql[l - 1] / sig \
                 - sli.qvsig(dt)[l] * betaqv[l - 1] * cqv[l - 1] / sig \
@@ -747,7 +747,10 @@ def solve_iso(sli, dt):
 pth = os.getcwd()
 path = os.path.abspath(os.path.join(pth, "..", ".."))
 
-sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
+ignorealphai, ignorealphaik, ignoredl, ignoredvi = False, False, False, False
+ignore = [ignorealphai, ignorealphaik, ignoredl, ignoredvi]
+sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_6')  # imports all the variable files /variables folder: testcase-1, sig=1
+
 dciso = []
 ciso = []
 cdelta = []
@@ -755,7 +758,7 @@ for dt in range(len(sli.get_in_soil())):
     
     print(dt)
    
-    c, d = solve_iso(sli, dt)
+    c, d = solve_iso(sli, dt, ignore)
     #print(c.tolist())
     dciso.append(d)
     ciso.append(c)    

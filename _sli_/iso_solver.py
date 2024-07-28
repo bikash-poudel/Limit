@@ -15,25 +15,62 @@ import iso_storages
 import iso_fluxes
 
 
+def test_case(testcase=1):
+    ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True,
+              'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
+
+    if testcase == 1 or testcase == 2:
+        return ignore
+    elif testcase == 3 or testcase == 4:
+        ignore['ignorealphai'] = False
+        return ignore
+    elif testcase == 5:
+        ignore['ignorealphai'] = False
+        ignore['ignoredli'] = False
+
+        return ignore
+    elif testcase == 6:
+
+        ignore['ignorealphai'] = False
+        ignore['ignoredli'] = False
+        ignore['ignoredvi'] = False
+        ignore['ignorealphaik'] = False
+
+        return ignore
+
+    else:
+        raise NotImplementedError
+
+
+def get_sli(testcase=1):
+    pth = os.getcwd()
+    path = os.path.abspath(os.path.join(pth, "..", ".."))
+
+    # imports all the variable files /variables folder: testcase-1, sig=1
+    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_{}'.format(testcase))
+
+    return sli
+
+
 def _layers(c, sli):
+
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     dt = 0  # initial states
     lower_boundaries = np.cumsum(sli.dx(dt))
-    init_c_iso = sli.ciso(dt)[1:]  # ignoring the litter layer concentration
+    init_c_iso = sli.ciso(1)[1:]  #initial concentration from sli at time-1  # ignoring the litter layer concentration
     theta = sli.theta(dt)
     theta_r = sli.thetar(dt)
     theta_sat = sli.thetasat(dt)
     tortuosity = sli.tortuosity(dt)
     T_soil = sli.T_soil0(dt)
-    dT = sli.deltaT(dt)
     rH = sli.R_humidity(dt)
     psi = sli.matric_pot(dt)
 
     id = 0
     upper_boundary = 0
-    for lower_boundary, ciso, th, tr, tsat, tor, T, d_T, r_H, PSI in \
-            zip(lower_boundaries, init_c_iso, theta, theta_r, theta_sat, tortuosity, T_soil, dT, rH, psi):
+    for lower_boundary, ciso, th, tr, tsat, tor, T, r_H, PSI in \
+            zip(lower_boundaries, init_c_iso, theta, theta_r, theta_sat, tortuosity, T_soil, rH, psi):
         new_layer = iso_storages.iso_soil_layer(ID=id,
                                                 upper_boundary=upper_boundary,
                                                 lower_boundary=lower_boundary,
@@ -43,7 +80,6 @@ def _layers(c, sli):
                                                 theta_sat=tsat,
                                                 tortuosity=tor,
                                                 T=T + Tzero_sli,
-                                                dT=d_T,
                                                 rH=r_H,
                                                 psi=PSI
                                                 )
@@ -80,6 +116,7 @@ def _atm(sli):
 
 
 def update_storages(c, sli, dt):
+
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     # atmospheric variables
@@ -93,14 +130,13 @@ def update_storages(c, sli, dt):
     # Update layers
     theta = sli.theta(dt)
     T_soil = np.array(sli.T_soil0(dt)) + Tzero_sli
-    dT = sli.deltaT(dt)[1:]  # ignoring litter layer
     rH = sli.R_humidity(dt)
     psi = sli.matric_pot(dt)
-    c.update_layers(theta=theta, T=T_soil, dT=dT, rH=rH, psi=psi)
+    c.update_layers(theta=theta, T=T_soil, rH=rH, psi=psi)
 
     # boundary storage
     h0 = sli.pond_height(dt)
-    # c.update_pond(pond_height=h0)
+    c.update_pond(pond_height=h0)
 
     c_aquifer = sli.cali(dt)
     c.update_aquifer(c_iso={"2H": 1.0, "18O": c_aquifer})
@@ -147,6 +183,7 @@ def update_boundaries(c, sli, dt):
 
 
 def iso_solve(sli, solute, **ignore):
+
     atm = _atm(sli)  # atmosphere
     p = iso_project.iso_project()  # create a project
     p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
@@ -155,8 +192,8 @@ def iso_solve(sli, solute, **ignore):
     _layers(c, sli)  # add soil layers to the new cell
     c.install_connections()  # flux connections between the layers
 
-    # pd = iso_storages.iso_pond()
-    # c.add_pond(pd)
+    pd = iso_storages.iso_pond(pond_height=0)
+    c.add_pond(pd)
 
     # boundary connections
     c.add_evaporation()
@@ -174,8 +211,8 @@ def iso_solve(sli, solute, **ignore):
     c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
     c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
 
-    for dt in range(len(sli.get_in_soil())):
-        # dt = len(sli.get_in_soil()) - 1
+    for dt in range(1, len(sli.get_in_soil())):
+
         print(dt)
 
         delta_t = sli.dt(dt)
@@ -205,16 +242,13 @@ def iso_solve(sli, solute, **ignore):
     return c_iso, c_iso_delta
 
 
-ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True,
-          'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
-
-pth = os.getcwd()
-path = os.path.abspath(os.path.join(pth, "..", ".."))
-
-sli = Sli.SlI(
-    path + '\_sli_\sli_label3\iso_variables')  # imports all the variable files /variables folder: testcase-1, sig=1
-
+Testcase = 6
 solute = '18O'
+
+ignore = test_case(testcase=Testcase)
+sli = get_sli(testcase=Testcase)
+
+
 c, d = iso_solve(sli, solute='18O', **ignore)
 
 

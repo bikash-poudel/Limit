@@ -535,12 +535,11 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
 
-    def update_layers(self, theta, T, dT, rH, psi):
+    def update_layers(self, theta, T, rH, psi):
 
         """
         updates the  states to current time step.
         """
-
         try:
             if rH is None:
                 rH = [None] * len(self.__layers)
@@ -548,16 +547,20 @@ class iso_cell(object):
             if psi is None:
                 raise ValueError("Missing matric potential (psi) for all soil layers")
 
-            for lr, th, T_soil, d_T, r_H, pot in zip(self.__layers, theta, T, dT, rH, psi):
+            for lr, th, T_soil, r_H, pot in zip(self.__layers, theta, T, rH, psi):
 
-                lr.theta = th  # update theta
-                lr.T = T_soil  # updata Temperature
-                lr.dT = d_T  # update delta temperature
+                lr.theta_t0 = lr.theta  # u[date theta for previous time
+                lr.theta = th  # update theta for current time
+
+                lr.T0 = lr.T  # update temperature for previous time
+                lr.T = T_soil  # updata current temperature Temperature
+
                 lr.rH = r_H  # update soil relative humidity
-                lr.psi = pot  # updat matric potential
+                lr.psi_0 = lr.psi  # update matric potential previosu time
+                lr.psi = pot  # updat matric potential current time
 
         except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+            raise NotImplementedError("A required value was not provided.")
 
     def update_c_layers(self, conc_iso, Isotopologue):
         """
@@ -579,7 +582,9 @@ class iso_cell(object):
         updates the isotope concentration to current time step.
         """
 
-        self.__layers[0].pond.set_pond_height(pond_height)
+        self.__layers[0].pond.pond_height_t0 = self.__pond.pond_height
+        self.__layers[0].pond.pond_height = pond_height
+
         self.__pond = self.__layers[0].pond
 
     def update_aquifer(self, c_iso={"2H": 1.0, "18O": 1.0}):
@@ -664,6 +669,7 @@ class iso_cell(object):
         self.connection_evap.q_evap = self.q_evap
         self.connection_evap.ql = self.ql_surface
         self.connection_evap.qv = self.qv_surface
+        self.connection_evap.T_surface = self.Ts
 
     def update_transpiration(self, q_trans=[]):
         """
@@ -745,7 +751,8 @@ class iso_cell(object):
             else:
                 ql_aq = ql_layer
 
-            self.__connection_to_aquifer.ql = ql_aq
+            #self.__connection_to_aquifer.ql = ql_aq
+            self.connection_to_aquifer.ql = ql_aq
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err

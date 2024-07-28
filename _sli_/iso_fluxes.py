@@ -628,7 +628,9 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
     def calc_flux_liquid(self, Isotopologue, **kwargs):
 
         T_mean = (self.left_node.T + self.right_node.T) / 2 # average tempereture between nodes
-        dT_mean = (self.left_node.dT + self.right_node.dT) / 2
+        T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
+
+        dT_mean = T_mean - T_mean_0
 
         alpha_i_mean = self.left_node.alpha_i(Isotopologue=Isotopologue, T=T_mean, **kwargs)
         d_beta_mean = self.left_node.d_beta(Isotopologue=Isotopologue, T=T_mean, dT=dT_mean, **kwargs)
@@ -820,7 +822,9 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
     def calc_flux_liquid(self, Isotopologue, **kwargs):
 
         T_mean = (self.left_node.T + self.right_node.T) / 2 # average tempereture between nodes
-        dT_mean = (self.left_node.dT + self.right_node.dT) / 2
+        T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2 # average tempereture between nodes previous time
+
+        dT_mean = T_mean - T_mean_0
 
         alpha_i_mean = self.left_node.alpha_i(Isotopologue=Isotopologue, T=T_mean, **kwargs)
         d_beta_mean = self.left_node.d_beta(Isotopologue=Isotopologue, T=T_mean, dT=dT_mean, **kwargs)
@@ -938,7 +942,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
     def calc_flux_i(self, Isotopologue,formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz", **kwargs):
 
         ciso_surface = self.c_iso_liq_surface(Isotopologue=Isotopologue, formulation_dl_i=formulation_dl_i, **kwargs)
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl, **kwargs)
+        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
 
         c_evap_out = self.get_conc_evapout(Isotopologue=Isotopologue, c_iso_surface=ciso_surface, nk=nk, **kwargs)
         c_evap_in = self.get_conc_evapin(Isotopologue=Isotopologue, nk=nk, **kwargs)
@@ -1036,7 +1040,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl, **kwargs)
+        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation=formulation_alpha_i_k, **kwargs)
 
@@ -1090,7 +1094,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl, **kwargs)
+        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation="MathieuBariac", **kwargs)
 
@@ -1243,7 +1247,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         except ValueError as err:
             return 0.67
 
-    def nk_sli_solve(self, thetasat_surface, Sl, **kwargs):
+    def nk_sli_solve(self, thetasat_surface, Sl):
         ## Different formulation in SLI: Appendix : B.7
 
         """
@@ -1255,12 +1259,11 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         @param theta_surface: liquid phase at soil surface (m**3/m**3 )
         @type theta_surface: Float
         """
-        ignore_dv_i = kwargs.get('ignoredvi', False)
-        if ignore_dv_i:
-            nk = ((thetasat_surface * min(Sl, 1) - 0) * 0.5 + (thetasat_surface * (1 - min(Sl, 1)))) \
-                 / (thetasat_surface - 0)
-        else:
-            nk = 1
+
+        nk = ((thetasat_surface * min(Sl, 1) - 0) * 0.5 + (thetasat_surface * (1 - min(Sl, 1)))) \
+             / (thetasat_surface - 0)
+
+        # nk = 1 if testcase == 7 or 8: sli_solve
 
         return nk
 

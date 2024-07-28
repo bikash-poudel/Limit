@@ -462,13 +462,15 @@ class iso_storage(flux_node):
                  lower_boundary,  # in (m)
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                  # Dict with solutes and initial concentrations in kg/m**3 (!!NO delta signature!!) (currently supported "2H" and/or "18O")
+                 theta_t0=0.3,  # volumetric water content m3/m3 at previous time
                  theta=0.3,  # volumetric water content m3/m3
                  theta_0=0.0,  # volumetric water content m3/m3 at high suctions
                  theta_sat=0.35,  # volumetric water content m3/m3 at saturation, or porosity of the soil m3/m3
-                 T=283.15,
-                 dT=0,  # delta temperature in Kelvin
+                 T0=283.15,  # Temperature previous time [kelvin]
+                 T=283.15,  # temperature current time [Kelvin]
                  rH=0,  # soil relative humidity
-                 psi=None  # soil matric potential
+                 psi_0=None,  # soil matric potential at previous time
+                 psi=None  # matric potential at current time
                  ):
         """
         Constructor of iso_storage
@@ -480,12 +482,14 @@ class iso_storage(flux_node):
         self.upper_boundary = upper_boundary
         self.lower_boundary = lower_boundary
         self.thickness = lower_boundary - upper_boundary
+        self.theta_t0 = theta_t0
         self.theta = theta
         self.theta_sat = theta_sat
         self.theta_0 = theta_0
+        self.T0 = T0
         self.T = T
-        self.dT = dT
         self.rH = rH
+        self.psi_0 = psi_0
         self.psi = psi
         self.pond = None
 
@@ -518,9 +522,13 @@ class iso_storage(flux_node):
     def cell(self, c):
 
         """
-        @return: Returns the cell associated with the storage
+        @return: sets the cell for the current layer / storage
         """
         self.__cell = c
+
+    @property
+    def dT(self):
+        return self.T - self.T0
 
     """Functions"""
 
@@ -643,13 +651,35 @@ class iso_storage(flux_node):
             print(err)
             raise NotImplementedError
 
-    def del_eff_saturation(self, Isotopologue, d_cv=0.0, d_sliq=0.0, **kwargs):
+    def del_eff_saturation(self, Isotopologue, **kwargs):
 
         try:
-            # s_liq = self.get_liq_saturation() + d_sliq
-            # cvs = cv + d_cv
+
+            Tzero = 273.16000366210938
+            Mw = 0.018015999346971512  # Molecular weight of water (kg / mol)
+            R = 8.3142995834350586  # universal gas constant (j / mol / k)
+
+            p_sat_0 = 610.59999465942383 * exp(
+                17.270000457763672 * (self.T0 - Tzero) /
+                ((self.T0 - Tzero) + 237.30000305175781))  # Saturation vapour pressure, ps, in pascal
+            cv_sat_0 = p_sat_0 * Mw / R / self.T0 / 1000  # m3/m3
+            cv_0 = self.relative_humidity(psi=self.psi_0, T=self.T0) * cv_sat_0  # sli_utils.f90:L1417
+
+            S0 = (self.theta_t0 - self.theta_0) / (self.theta_sat - self.theta_0)
+            liq_S_0 = (S0 - cv_0) / (1 - cv_0)
+
+            if self.pond is not None:
+                Sl_0 = liq_S_0 + self.pond.pond_height_t0 / self.thickness / (self.theta_sat - self.theta_0)
+            else:
+                Sl_0 = liq_S_0
+
+            d_sliq = self.Sl - Sl_0
+            d_cv = self.cv - cv_0
+
+            dT = self.dT
+            dbeta = self.d_beta(Isotopologue=Isotopologue, T=self.T, dT=dT, **kwargs)
+
             s_liq = self.get_liq_saturation()
-            dbeta = self.d_beta(Isotopologue=Isotopologue, T=self.T, dT=self.dT, **kwargs)
             beta = self.beta(Isotopologue=Isotopologue, **kwargs)
 
             if s_liq < 1:
@@ -770,6 +800,7 @@ class iso_pond(flux_node):
     """
 
     def __init__(self,
+                 pond_height_t0=0.0,
                  pond_height=0.0,
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                  T=283.15,  # temperature in Kelvin
@@ -778,13 +809,16 @@ class iso_pond(flux_node):
         Constructor of iso_storage
         """
         flux_node.__init__(self, conc_iso_liquid, T)
+        self.pond_height_t0 = pond_height_t0
         self.__pond_height = pond_height
+        self.delta_h0 = self.__pond_height - pond_height_t0  # change in pond height
 
     @property
     def pond_height(self):
         return self.__pond_height
 
-    def set_pond_height(self, pond_height):
+    @pond_height.setter
+    def pond_height(self, pond_height):
         self.__pond_height = pond_height
 
 
@@ -809,17 +843,19 @@ class iso_soil_layer(iso_storage):
                  # cell,  # as iso_cell
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                  # Dict with solutes and initial concentrations in kg/m**3 (!!NO delta signature!!) (currently supported "2H" and/or "18O")
-                 theta=0.3,  # volumetric water content m3/m3
+                 theta_t0=0.3, # volumetric water content m3/m3 at previous time
+                 theta=0.3,  # volumetric water content m3/m3 at current time
                  theta_0=0.0,  # volumetric water content m3/m3 at high suctions
                  theta_sat=0.35,  # volumetric water content m3/m3 at saturation, or porosity of the soil m3/m3
                  tortuosity=0.67,  # tortuosity of the soil m/m
-                 T=283.15,  # temperature in Kelvin
-                 dT=0,  # change in temperature
+                 T0 = 283.15,  # temperature at previous time step
+                 T=283.15,  # temperature in Kelvin at current time
                  rH=0,  # soil relative humidity
-                 psi=1,  # matric potential
+                 psi_0=1,  # matric potential for previous time
+                 psi=1,  # matric potential current time
                  ):
-        iso_storage.__init__(self, ID, upper_boundary, lower_boundary, conc_iso_liquid, theta, theta_0, theta_sat,
-                             T, dT, rH, psi)
+        iso_storage.__init__(self, ID, upper_boundary, lower_boundary, conc_iso_liquid,
+                             theta_t0, theta, theta_0, theta_sat, T0, T, rH, psi_0, psi)
         flux_node.__init__(self, conc_iso_liquid, T)
         self.tortuosity = tortuosity
         self.rH = rH
