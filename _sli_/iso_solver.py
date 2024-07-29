@@ -256,16 +256,22 @@ for Testcase in range(1, 7):
 
     delta[Testcase] = d[solute][-1]
 
-depth = np.insert(np.array(sli.dx(0)), 0, 0)
+depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
 centers = -(depth[:-1] + depth[1:]) / 2.0
+d = centers.tolist()[:10]
 
-d = centers.tolist()
-
-plt.plot(delta[1], d, label='testcase_1')
-plt.plot(delta[2], d, label='testcase_2')
-plt.plot(delta[3], d, label='testcase_3')
-plt.plot(delta[4], d, label='testcase_4')
-plt.plot(delta[5], d, label='testcase_5')
-plt.plot(delta[6], d, label='testcase_6')
+plt.plot(delta[1][:10], d, label='testcase_1')
+plt.plot(delta[2][:10], d, label='testcase_2')
+plt.plot(delta[3][:10], d, label='testcase_3')
+plt.plot(delta[4][:10], d, label='testcase_4')
+plt.plot(delta[5][:10], d, label='testcase_5')
+plt.plot(delta[6][:10], d, label='testcase_6')
+plt.xlim([-15, 15])
+plt.xlabel('delta_18O')
+plt.ylabel('depth [m]')
+plt.title('initial testcases after 250 days')
 plt.legend()
+plt.gca().set_aspect(aspect=60)
 plt.show()
+
+
