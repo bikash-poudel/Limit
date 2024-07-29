@@ -6,13 +6,13 @@ Created on 03.06.2024
 
 import os
 import numpy as np
-from decimal import Decimal, getcontext
-from mpmath import mp, mpf
+
 
 import Sli
 import iso_project
 import iso_storages
-import iso_fluxes
+
+import matplotlib.pyplot as plt
 
 
 def test_case(testcase=1):
@@ -213,7 +213,7 @@ def iso_solve(sli, solute, **ignore):
 
     for dt in range(1, len(sli.get_in_soil())):
 
-        print(dt)
+        #print(dt)
 
         delta_t = sli.dt(dt)
 
@@ -242,13 +242,30 @@ def iso_solve(sli, solute, **ignore):
     return c_iso, c_iso_delta
 
 
-Testcase = 6
-solute = '18O'
+delta = {}
+for Testcase in range(1, 7):
 
-ignore = test_case(testcase=Testcase)
-sli = get_sli(testcase=Testcase)
+    print(Testcase)
 
+    solute = '18O'
 
-c, d = iso_solve(sli, solute='18O', **ignore)
+    ignore = test_case(testcase=Testcase)
+    sli = get_sli(testcase=Testcase)
 
+    c, d = iso_solve(sli, solute='18O', **ignore)
 
+    delta[Testcase] = d[solute][-1]
+
+depth = np.insert(np.array(sli.dx(0)), 0, 0)
+centers = -(depth[:-1] + depth[1:]) / 2.0
+
+d = centers.tolist()
+
+plt.plot(delta[1], d, label='testcase_1')
+plt.plot(delta[2], d, label='testcase_2')
+plt.plot(delta[3], d, label='testcase_3')
+plt.plot(delta[4], d, label='testcase_4')
+plt.plot(delta[5], d, label='testcase_5')
+plt.plot(delta[6], d, label='testcase_6')
+plt.legend()
+plt.show()

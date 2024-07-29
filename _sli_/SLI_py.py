@@ -747,9 +747,9 @@ def solve_iso(sli, dt, ignore):
 pth = os.getcwd()
 path = os.path.abspath(os.path.join(pth, "..", ".."))
 
-ignorealphai, ignorealphaik, ignoredl, ignoredvi = False, False, False, False
+ignorealphai, ignorealphaik, ignoredl, ignoredvi = True, True, True, True
 ignore = [ignorealphai, ignorealphaik, ignoredl, ignoredvi]
-sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_6')  # imports all the variable files /variables folder: testcase-1, sig=1
+sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_2')  # imports all the variable files /variables folder: testcase-1, sig=1
 
 dciso = []
 ciso = []

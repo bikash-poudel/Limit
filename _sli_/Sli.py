@@ -216,8 +216,11 @@ class SlI:
     def wind_speed(self, time):
         return float(self.in_parameter(time)[179])
 
-    def time_step(self, time):
+    def E_pot(self, time):
         return float(self.in_parameter(time)[180])
+
+    def time_step(self, time):
+        return float(self.in_parameter(time)[181])
 
 
     ###### in iso ######

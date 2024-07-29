@@ -227,6 +227,21 @@ class flux_node(object):
                      "Returns the Saturation vapour pressure, ps, in pascal based on Goff and Gratch "
                      "and valid over the range 0 to 60 Degree celsius")
 
+    @property
+    def csat(self):
+        """!returns  sat vapour pressure curve in kg m-3"""
+
+        # cable_sli_utils.f90, l:2114
+        Tzero = 273.16000366210938
+        Mw = 0.018015999346971512  # Molecular weight of water (kg / mol)
+        R = 8.3142995834350586  # universal gas constant (j / mol / k)
+
+        csat = 610.59999465942383 * exp(17.270000457763672 * (self.T - Tzero)
+                                        / ((self.T - Tzero) + 237.30000305175781)) * Mw / R / self.T
+
+        return csat
+
+
     @classmethod
     def delta_to_concentration(self, delta_i, solute_i, R_ref={"2H": 0.00015576, "18O": 0.00200520}, M_w=0.018,
                                M_i={"2H": 0.019, "18O": 0.020}, density_H2O=1000.0):
@@ -332,6 +347,7 @@ class iso_atmosphere(flux_node):
                  Rh_atmosphere=0.20,  # relative humidity of the atmosphere (-)
                  Pa_atmosphere=10 ** 5,  # atmospheric pressure (Pa)
                  initial_wind_speed=2.0,  # wind speed at top of canopy in m/s
+                 R_net=0.0,  # net radiation absorbed
                  wind_speed=2.0,  # wind speed at top of canopy in m/s
                  hc=10,  # canopy height [m] (e.g. 40)
                  d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
@@ -376,6 +392,7 @@ class iso_atmosphere(flux_node):
         self.__conc_iso_vapor = conc_iso_vapor
         self.Rh = Rh_atmosphere  # porosity of the soil m3/m3
         self.Pa = Pa_atmosphere  # Atmospheric preassure (Pa)
+        self.R_net = R_net  # Net radiation absorbed
         self.wind_speed = wind_speed  # wind speed at top of canopy in m/s
         self.hc = hc  # canopy height [m]
         self.d0 = d0  # displacement height

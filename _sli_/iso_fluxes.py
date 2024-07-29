@@ -10,7 +10,6 @@ import iso_storages
 
 
 class flux_connection(object):
-
     """
     Description
     ===========
@@ -368,8 +367,9 @@ class liquid_diffusion(flux_connection, liquid_diffusion_base_class):
         thickness_left_node = self.left_node.thickness  # thickness in m
         thickness_right_node = self.right_node.thickness  # thickness in m
 
-        delta_z = self.left_node.center.distance(to_Point=self.right_node.center)  # distance between left and right node in cm
-        #delta_z = self.right_node.center - self.left_node.center
+        delta_z = self.left_node.center.distance(
+            to_Point=self.right_node.center)  # distance between left and right node in cm
+        # delta_z = self.right_node.center - self.left_node.center
 
         dl_mean = ((dli_eff_sli_leftnode * thickness_left_node + dli_eff_sli_rightnode * thickness_right_node) / (
                 thickness_right_node + thickness_left_node)) / delta_z
@@ -618,7 +618,7 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
         leftnode_dvi_sli, rightnode_dvi_sli = left_node_dv_i * self.left_node.cv, right_node_dv_i * self.right_node.cv
 
         delta_z = self.left_node.center.distance(to_Point=self.right_node.center)
-        #delta_z = self.right_node.center - self.left_node.center  # distance between left and right node in m
+        # delta_z = self.right_node.center - self.left_node.center  # distance between left and right node in m
 
         dv_i_mean = (leftnode_dvi_sli * self.left_node.thickness + rightnode_dvi_sli * self.right_node.thickness) / (
                 self.left_node.thickness + self.right_node.thickness) / delta_z
@@ -626,8 +626,7 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
         return dv_i_mean
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
-
-        T_mean = (self.left_node.T + self.right_node.T) / 2 # average tempereture between nodes
+        T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
         T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
 
         dT_mean = T_mean - T_mean_0
@@ -643,7 +642,6 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
         return flux_v
 
     def calc_flux_liquid_2(self, Isotopologue, **kwargs):
-
         beta_mean = (self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
                      + self.right_node.beta(Isotopologue=Isotopologue, **kwargs)) / 2
 
@@ -820,9 +818,8 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
         return flux
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
-
-        T_mean = (self.left_node.T + self.right_node.T) / 2 # average tempereture between nodes
-        T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2 # average tempereture between nodes previous time
+        T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
+        T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
 
         dT_mean = T_mean - T_mean_0
 
@@ -841,7 +838,6 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
         return flux_v
 
     def calc_flux_liquid_2(self, Isotopologue, **kwargs):
-
         flux = self.get_flux()
 
         beta_mean = (self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
@@ -939,7 +935,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
     def calc_flux_liquid(self, Isotopologue, **kwargs):
         return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
-    def calc_flux_i(self, Isotopologue,formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz", **kwargs):
+    def calc_flux_i(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz", **kwargs):
 
         ciso_surface = self.c_iso_liq_surface(Isotopologue=Isotopologue, formulation_dl_i=formulation_dl_i, **kwargs)
         nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
@@ -1030,7 +1026,8 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
     cv_surface = property(get_cv_surface, None, None, "concentration of water vapour at soil/air interface")
 
-    def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz", **kwargs):
+    def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz",
+                          **kwargs):
 
         """
         Calculates the concentration of minor isotopologue in liquid water at the surface (kg/m3_H2O)
@@ -1061,7 +1058,8 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         rbh = self.rbh(self.atmosphere.wind_speed, self.atmosphere.extku, self.atmosphere.LAI)
 
         cvs = self.cv_surface  # concentration of water vapour at soil/air interface (m3 (H2O liq)/ m3 (air))
-        c_iso_atm = self.atmosphere.civ_a(Isotopologue=Isotopologue)  # atmospheric isotopic concentration w.r.t relative humidity / vapour concentration
+        c_iso_atm = self.atmosphere.civ_a(
+            Isotopologue=Isotopologue)  # atmospheric isotopic concentration w.r.t relative humidity / vapour concentration
 
         # upper part okay
         if self.ql > 0.0:  # liquide water flux (m/day) between the atmosphere and the top soil layer (negative value leaving the cell positive entering the cell)?
@@ -1292,27 +1290,6 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
         return rbh
 
-    def rbw(self, ram, rbh):
-        """
-        Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
-
-        Description
-        ===========
-        @param ram: Aerodyamic resistance (from z0m to hc)
-        @type ram: float
-
-        @param rs: Soil laminar boundary layer resistance  (Kustas & Norman AFM 94 (1999) 13-29).
-        @type rs: float
-
-        @return: Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
-
-        Control status: Checked on 15.05.2013 --> Results are the same as for SLI
-        vmet%rbw in sli_main.f90:L361
-        """
-        rbh = ram + rbh  # resistance to water vapour transfer beween surface and lowest atmospheric layer
-
-        return rbh
-
     def ram(self, wind_speed, hc, d0, z0m):
         """
         Returns the aerodyamic resistance (from z0m to hc).
@@ -1340,6 +1317,27 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
         return ram
 
+    def rbw(self, ram, rbh):
+        """
+        Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
+
+        Description
+        ===========
+        @param ram: Aerodyamic resistance (from z0m to hc)
+        @type ram: float
+
+        @param rs: Soil laminar boundary layer resistance  (Kustas & Norman AFM 94 (1999) 13-29).
+        @type rs: float
+
+        @return: Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
+
+        Control status: Checked on 15.05.2013 --> Results are the same as for SLI
+        vmet%rbw in sli_main.f90:L361
+        """
+        rbh = ram + rbh  # resistance to water vapour transfer beween surface and lowest atmospheric layer
+
+        return rbh
+
 
 class transpiration(boundary_connection):
     """
@@ -1365,7 +1363,7 @@ class transpiration(boundary_connection):
 
         if isinstance(atmosphere, iso_storages.iso_atmosphere) and isinstance(soil_layer, iso_storages.iso_soil_layer):
 
-            boundary_connection.__init__(self, left_node=atmosphere,  right_node=soil_layer)
+            boundary_connection.__init__(self, left_node=atmosphere, right_node=soil_layer)
             self.soil_layer = soil_layer
         else:
             raise NotImplementedError
@@ -1385,7 +1383,8 @@ class transpiration(boundary_connection):
         Positive flux of the given Isotopologue [m/day] left to right
         """
 
-        return self.calc_flux(Isotopologue=Isotopologue) * self.soil_layer.get_conc_iso_liquid(Isotopologue=Isotopologue)
+        return self.calc_flux(Isotopologue=Isotopologue) * self.soil_layer.get_conc_iso_liquid(
+            Isotopologue=Isotopologue)
 
 
 class surface_runoff(boundary_connection):
@@ -1424,13 +1423,12 @@ class surface_runoff(boundary_connection):
     def calc_flux_liquid(self, Isotopologue, **kwargs):
         return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
-    def calc_flux_i(self, Isotopologue,**kwargs):
+    def calc_flux_i(self, Isotopologue, **kwargs):
 
         return self.calc_flux(Isotopologue=Isotopologue) * self.top_layer.get_conc_iso_liquid(Isotopologue=Isotopologue)
 
 
 class precipitation(boundary_connection):
-
     """
     Description
     ===========
@@ -1498,7 +1496,7 @@ class aquifer_connection(boundary_connection):
 
         if isinstance(aquifer, iso_storages.iso_aquifer) and isinstance(soil_layer, iso_storages.iso_soil_layer):
 
-            boundary_connection.__init__(self, left_node=soil_layer,  right_node=aquifer)
+            boundary_connection.__init__(self, left_node=soil_layer, right_node=aquifer)
             self.soil_layer = soil_layer
             self.aquifer = aquifer
         else:
@@ -1530,4 +1528,3 @@ class aquifer_connection(boundary_connection):
             flux_i = self.get_flux() * self.soil_layer.get_conc_iso_liquid(Isotopologue=Isotopologue)
 
         return flux_i
-
