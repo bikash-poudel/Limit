@@ -78,7 +78,7 @@ class iso_project(object):
         i_cell = iso_cell.iso_cell(location=i_point, atmosphere=atmosphere, area=area)
         self.__cells.append(i_cell)
 
-    def run(self, Isotopologue, delta_time, delta_cv=[], deltaS_liq=[], **kwargs):
+    def run(self, Isotopologue, delta_time, **kwargs):
         """
         Runs SLI for one time step. All state variables (Temperatures) and flux parameters (q_l, q_v) need to be updated before running SLI.
         After one run cycle the states of the sytem will be updated
@@ -89,8 +89,6 @@ class iso_project(object):
         try:
             matrix_A, matrix_B = self.coeff_matrix(Isotopologue=Isotopologue,
                                                    delta_time=delta_time,
-                                                   delta_cv=delta_cv,
-                                                   deltaS_liq=deltaS_liq,
                                                    **kwargs)
 
             a = matrix_A.tocsr()
@@ -103,7 +101,7 @@ class iso_project(object):
 
         return delta_c
 
-    def coeff_matrix(self, Isotopologue, delta_time, delta_cv=[], deltaS_liq=[], **kwargs):
+    def coeff_matrix(self, Isotopologue, delta_time, **kwargs):
 
         try:
             A, B = self.flux_matrix(Isotopologue=Isotopologue, **kwargs)
@@ -115,8 +113,6 @@ class iso_project(object):
                 A[s_index, s_index] -= i_storage.get_eff_liquid_volume(Isotopologue=Isotopologue,
                                                                        **kwargs) / delta_time
                 B[s_index] += i_storage.get_storage_i(Isotopologue=Isotopologue,
-                                                      delta_cv=delta_cv[s_index],
-                                                      deltaS_liq=deltaS_liq[s_index],
                                                       **kwargs) / delta_time
 
         except ValueError as err:

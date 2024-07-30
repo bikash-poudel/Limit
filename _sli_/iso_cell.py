@@ -483,7 +483,7 @@ class iso_cell(object):
             self.__connection_prec = pr
 
         except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+            raise NotImplementedError("A required value was not provided.")
 
     def add_aquifer(self, aquifer, soil_layer, ql_layer=None):
         """
@@ -510,7 +510,17 @@ class iso_cell(object):
             self.__connection_to_aquifer = aq
 
         except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+            raise NotImplementedError("A required value was not provided.")
+
+    def get_conc_layers(self, Isotopologue):
+
+        """"List of Isotope concentration in layers """
+
+        c = []
+        for l in self.__layers:
+            c.append(l.get_conc_iso_liquid(Isotopologue))
+
+        return c
 
     """"Update storages"""
 

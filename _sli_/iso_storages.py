@@ -370,6 +370,9 @@ class iso_atmosphere(flux_node):
         @param Pa_atmosphere: atmospheric pressure (Pa)
         @type Pa_atmosphere: float
 
+        @param R_net: Net radiation absorbed
+        @type R_net: float
+
         @param wind_speed: wind speed at top of canopy (m/s)
         @type wind_speed: float
 
@@ -549,13 +552,13 @@ class iso_storage(flux_node):
 
     """Functions"""
 
-    def get_storage_i(self, Isotopologue, delta_cv=0.0, deltaS_liq=0.0, **kwargs):
+    def get_storage_i(self, Isotopologue, **kwargs):
         """
         @return: Returns the total amount of the isotopes
         """
         storage_v = self.get_liquid_volume()
         storage_i = self.get_conc_iso_liquid(Isotopologue=Isotopologue) \
-                    * self.del_eff_saturation(Isotopologue=Isotopologue, d_cv=delta_cv, d_sliq=deltaS_liq, **kwargs)
+                    * self.del_eff_saturation(Isotopologue=Isotopologue, **kwargs)
         return storage_v * storage_i
 
     def get_eff_liquid_volume(self, Isotopologue, **kwargs):
