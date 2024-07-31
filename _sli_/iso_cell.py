@@ -6,7 +6,7 @@ Created on 23.05.2024
 
 import iso_storages
 import iso_fluxes
-
+import vapor_flux
 
 class iso_cell(object):
     """
@@ -393,7 +393,7 @@ class iso_cell(object):
                     self.__connection_v_adv.append(vadv)
 
         except Exception as err:
-            raise NotImplementedError("An unexpected error occurred.") from err
+            raise NotImplementedError("An unexpected error occurred.")
 
     def add_pond(self, pond):
         """
@@ -449,8 +449,8 @@ class iso_cell(object):
 
             self.__connections_trans = tr
 
-        except ValueError as err:
-            raise NotImplementedError("number of transpiration fluxes must be equal to that of soil layers.") from err
+        except ValueError:
+            raise NotImplementedError("number of transpiration fluxes must be equal to that of soil layers.")
 
     def add_surface_runoff(self):
         """
@@ -638,25 +638,32 @@ class iso_cell(object):
             print(err)
             raise NotImplementedError
 
-    def update_vapor_fluxes(self, vapor_fluxes):
+    def update_vapor_fluxes(self, vapor_fluxes=None):
 
         """"
         updates the list of vapor fluxes within the soil layers for current time step
         """
 
         try:
-            if len(vapor_fluxes) == len(self.__layers):
-                self.__vapor_fluxes = vapor_fluxes
-            else:
-                raise ValueError ("Number of vapor fluxes must be equal to the cell layers")
+            if vapor_fluxes is not None:
 
-            # assign vapor fluxes to the connections
-            if len(vapor_fluxes[:-1]) == len(self.connections_v_adv):
+                if len(vapor_fluxes) == len(self.__layers):
+                    self.__vapor_fluxes = vapor_fluxes
+                else:
+                    raise ValueError("Number of vapor fluxes must be equal to the cell layers")
 
-                for qv, c_v_adv in zip(self.vapor_fluxes, self.connections_v_adv):
-                    c_v_adv.q_v = qv
+                # assign vapor fluxes to the connections
+                if len(vapor_fluxes[:-1]) == len(self.connections_v_adv):
+
+                    for qv, c_v_adv in zip(self.vapor_fluxes, self.connections_v_adv):
+                        c_v_adv.q_v = qv
+                else:
+                    raise ValueError("Number of vapor fluxes must be equal to the flux connections")
+
             else:
-                raise ValueError("Number of vapor fluxes must be equal to the flux connections")
+                qv = vapor_flux.vapor_flux()
+                for c_v_adv in self.connections_v_adv:
+                    c_v_adv.q_v = qv.q_vapor(left_node=c_v_adv.left_node, right_node=c_v_adv.right_node)
 
         except ValueError as err:
             print(err)

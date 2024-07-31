@@ -30,7 +30,7 @@ def visualize(delta, sli, Isotopologue):
     plt.ylabel('depth [m]')
     plt.title('initial testcases after 250 days')
     plt.legend()
-    #plt.gca().set_aspect(aspect=40)
+    plt.gca().set_aspect(aspect=150)
     plt.show()
 
 
@@ -207,7 +207,7 @@ def update_boundaries(c, sli, dt):
     qv = sli.qvsig(dt)[1:]
 
     c.update_liquid_fluxes(liquid_fluxes=ql)
-    c.update_vapor_fluxes(vapor_fluxes=qv)
+    c.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed self, else list of qv, len = len(layers)
 
     # transpiration
     ql_trans = sli.qex(dt)
@@ -247,7 +247,7 @@ def run_iso(p, solute, sli, **kwargs):
 
         c.update_c_layers(conc_iso=c_t, Isotopologue=solute)
 
-    return c_iso, c_iso_delta
+    return p, c_iso, c_iso_delta
 
 
 def iso_setup(sli, solute, testcase=None, **ignore):
@@ -280,10 +280,10 @@ def run_testcases(test_cases, sli, solute):
         print('Testcase:', Testcase, 'Isotopologue:', solute)
         ignore = test_case(testcase=Testcase)
 
-        c, d = iso_setup(sli, solute=solute, testcase=Testcase, **ignore)
+        p, c, d = iso_setup(sli, solute=solute, testcase=Testcase, **ignore)
         delta[Testcase] = d[solute][-1]
 
-    return delta
+    return p, delta
 
 
 def moisture(sli):
@@ -313,12 +313,12 @@ def moisture(sli):
     plt.show()
 
 
-solute = "2H"
+solute = "18O"
 sl_iso = get_sli()
-delta = run_testcases([1, 2, 3, 4, 5, 6], sl_iso, solute=solute)
+project, delta = run_testcases([1], sl_iso, solute=solute)
 visualize(delta=delta, sli=sl_iso, Isotopologue=solute)
 
-moisture(sl_iso)
+#moisture(sl_iso)
 
 
 
