@@ -10,6 +10,7 @@ import numpy as np
 import Sli
 import iso_project
 import iso_storages
+import iso_delta
 
 import matplotlib.pyplot as plt
 
@@ -86,9 +87,8 @@ def _layers(c, sli):
     rH = sli.R_humidity(dt)
     psi = sli.matric_pot(dt)
 
-    node = iso_storages.flux_node
-    init_c_iso_2H = [node.delta_to_concentration(-65, '2H')] * len(lower_boundaries)  # 0.15367056287906838
-    init_c_iso_18O = [node.delta_to_concentration(-8, '18O')] * len(lower_boundaries)  # sli.civa(dt) / sli.cva(dt)
+    init_c_iso_2H = [iso_delta.delta_to_concentration(-65, '2H')] * len(lower_boundaries)  # 0.15367056287906838
+    init_c_iso_18O = [iso_delta.delta_to_concentration(-8, '18O')] * len(lower_boundaries)  # sli.civa(dt) / sli.cva(dt)
 
     id = 0
     upper_boundary = 0
@@ -124,13 +124,12 @@ def _atm(sli, testcase):
     Rh_atm = sli.R_humidity_atm(dt)
     wind_speed = sli.wind_speed(dt)
 
-    node = iso_storages.flux_node
     if testcase == 1 or testcase == 3:
-        c_iso_2H = node.delta_to_concentration(-65, '2H')  # 0.15367056287906838
-        c_iso_18O = node.delta_to_concentration(-8, '18O')  # sli.civa(dt) / sli.cva(dt)
+        c_iso_2H = iso_delta.delta_to_concentration(-65, '2H')  # 0.15367056287906838
+        c_iso_18O = iso_delta.delta_to_concentration(-8, '18O')  # sli.civa(dt) / sli.cva(dt)
     elif testcase in [2, 4, 5, 6]:
-        c_iso_2H = node.delta_to_concentration(-112, '2H')  # 0.15367056287906838
-        c_iso_18O = node.delta_to_concentration(-15, '18O')  # sli.civa(dt) / sli.cva(dt)
+        c_iso_2H = iso_delta.delta_to_concentration(-112, '2H')  # 0.15367056287906838
+        c_iso_18O = iso_delta.delta_to_concentration(-15, '18O')  # sli.civa(dt) / sli.cva(dt)
     else:
         raise NotImplementedError
 
@@ -221,12 +220,8 @@ def run_iso(p, sli, **kwargs):
 
     c = p.get_cells()[0]  # get current cell of project
 
-    # delta signature of initial concentration
-    c2H_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, "2H") for c_iso in c.conc_2H]
-    c18O_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, "18O") for c_iso in c.conc_18O]
-
     c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
-    c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
+    c_iso_delta = {'2H': [c.conc_2H_delta], '18O': [c.conc_18O_delta]}
 
     solutes = ["2H", "18O"]
 
@@ -242,7 +237,7 @@ def run_iso(p, sli, **kwargs):
 
             current_conc = c.get_conc_layers(Isotopologue=solute)
             c_t = list(np.array(current_conc) + np.array(dc))
-            delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c_t]
+            delta = [iso_delta.concentration_to_delta(c_iso, solute) for c_iso in c_t]
 
             c_iso[solute].append(c_t), c_iso_delta[solute].append(delta)
 
@@ -251,7 +246,7 @@ def run_iso(p, sli, **kwargs):
     return c_iso, c_iso_delta
 
 
-def iso_setup(sli, testcase=None, **ignore):
+def iso_setup(sli, testcase=None, **kwargs):
 
     p = iso_project.iso_project()  # create a project
 
@@ -270,7 +265,7 @@ def iso_setup(sli, testcase=None, **ignore):
     aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # aquifer as boundary isotope storage
     c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
 
-    return run_iso(p, sli, **ignore)
+    return run_iso(p, sli, **kwargs)
 
 
 def run_testcases(test_cases, sli):
@@ -280,9 +275,9 @@ def run_testcases(test_cases, sli):
     for Testcase in test_cases:
 
         print('Testcase:', Testcase)
-        ignore = test_case(testcase=Testcase)
+        cases = test_case(testcase=Testcase)
 
-        c, d = iso_setup(sli, testcase=Testcase, **ignore)
+        c, d = iso_setup(sli, testcase=Testcase, **cases)
 
         # delta at the end of simulation for each test cases
         d_solute["2H"] = d["2H"][-1]
@@ -323,7 +318,7 @@ slI = get_sli()
 ignore = test_case(testcase=1)
 #delta = run_testcases([1], slI)
 
-q_v, conc, d = iso_setup(sli=slI, testcase=1, **ignore)
+conc, d = iso_setup(sli=slI, testcase=1, **ignore)
 #visualize(delta=delta, sli=slI, Isotopologue="2H")
 #visualize(delta=delta, sli=slI, Isotopologue="18O")
 

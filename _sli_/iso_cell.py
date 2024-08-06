@@ -7,6 +7,7 @@ Created on 23.05.2024
 import iso_storages
 import iso_fluxes
 import vapor_flux
+import iso_delta
 
 class iso_cell(object):
     """
@@ -122,6 +123,17 @@ class iso_cell(object):
         return c_2H
 
     @property
+    def conc_2H_delta(self):
+
+        delta_2H = []
+        for l in self.__layers:
+
+            c = l.get_conc_iso_liquid("2H")
+            delta_2H.append(iso_delta.concentration_to_delta(c, "2H"))
+
+        return delta_2H
+
+    @property
     def conc_18O(self):
         """"Returns the concentration of 2H in the soil layers"""
 
@@ -130,6 +142,17 @@ class iso_cell(object):
             c_18O.append(l.get_conc_iso_liquid('18O'))
 
         return c_18O
+
+    @property
+    def conc_18O_delta(self):
+
+        delta_18O = []
+        for l in self.__layers:
+
+            c = l.get_conc_iso_liquid("18O")
+            delta_18O.append(iso_delta.concentration_to_delta(c, "18O"))
+
+        return delta_18O
 
     @property
     def iso_storages(self):
