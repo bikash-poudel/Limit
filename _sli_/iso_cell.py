@@ -661,12 +661,18 @@ class iso_cell(object):
                     raise ValueError("Number of vapor fluxes must be equal to the flux connections")
 
             else:
-                qv = vapor_flux.vapor_flux()
-                for c_v_adv in self.connections_v_adv:
-                    c_v_adv.q_v = qv.q_vapor(left_node=c_v_adv.left_node, right_node=c_v_adv.right_node)
+                q = vapor_flux.vapor_flux()
+                q_v = []
+                for i, c_v_adv in enumerate(self.connections_v_adv):
 
-        except ValueError as err:
-            print(err)
+                    qv = q.q_vapor(left_node=c_v_adv.left_node, right_node=c_v_adv.right_node)
+                    c_v_adv.q_v = qv
+
+                    q_v.append(qv)
+
+                self.__vapor_fluxes = q_v
+
+        except ValueError:
             raise NotImplementedError
 
     def update_evaporation(self, q_ev=0.0, T_surface=273.0, ql_surface=0.0, qv_surface=0.0):

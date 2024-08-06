@@ -22,7 +22,7 @@ def visualize(delta, sli, Isotopologue):
 
     for case in delta.keys():
 
-        plt.plot(delta[case][:10], d, label='testcase_{}'.format(case))
+        plt.plot(delta[case][Isotopologue][:10], d, label='testcase_{}'.format(case))
         #plt.plot(delta[2][:10], d, label='testcase_2')
 
     #plt.xlim([-15, 15])
@@ -207,7 +207,7 @@ def update_boundaries(c, sli, dt):
     qv = sli.qvsig(dt)[1:]
 
     c.update_liquid_fluxes(liquid_fluxes=ql)
-    c.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed self, else list of qv, len = len(layers)
+    c.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed internally, else list of qv, len = len(layers)
 
     # transpiration
     ql_trans = sli.qex(dt)
@@ -216,41 +216,42 @@ def update_boundaries(c, sli, dt):
     # boundary storage
     c.update_connection_to_aquifer()
 
-    return c
 
-
-def run_iso(p, solute, sli, **kwargs):
+def run_iso(p, sli, **kwargs):
 
     c = p.get_cells()[0]  # get current cell of project
 
     # delta signature of initial concentration
-    c2H_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c.conc_2H]
-    c18O_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c.conc_18O]
+    c2H_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, "2H") for c_iso in c.conc_2H]
+    c18O_delta = [iso_storages.flux_node.concentration_to_delta(c_iso, "18O") for c_iso in c.conc_18O]
 
     c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
     c_iso_delta = {'2H': [c2H_delta], '18O': [c18O_delta]}
 
-    for dt in range(1, len(sli.get_in_soil())): # starting from next time step (n+1)
+    solutes = ["2H", "18O"]
+
+    for dt in range(1, 5000):  #len(sli.get_in_soil())):  # starting from next time step (n+1)
         print(dt)
         # update storage states and boundaries to current time
         update_storages(c, sli, dt), update_boundaries(c, sli, dt)
-        current_conc = c.get_conc_layers(Isotopologue=solute)
 
-        delta_t = sli.dt(dt)
-        dc = p.run(Isotopologue=solute, delta_time=delta_t, **kwargs)
+        for solute in solutes:
 
-        c_t = list(np.array(current_conc) + np.array(dc))
-        cdelta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c_t]
+            delta_t = sli.dt(dt)
+            dc = p.run(Isotopologue=solute, delta_time=delta_t, **kwargs)
 
-        c_iso[solute].append(c_t)
-        c_iso_delta[solute].append(cdelta)
+            current_conc = c.get_conc_layers(Isotopologue=solute)
+            c_t = list(np.array(current_conc) + np.array(dc))
+            delta = [iso_storages.flux_node.concentration_to_delta(c_iso, solute) for c_iso in c_t]
 
-        c.update_c_layers(conc_iso=c_t, Isotopologue=solute)
+            c_iso[solute].append(c_t), c_iso_delta[solute].append(delta)
 
-    return p, c_iso, c_iso_delta
+            c.update_c_layers(conc_iso=c_t, Isotopologue=solute)
+
+    return c_iso, c_iso_delta
 
 
-def iso_setup(sli, solute, testcase=None, **ignore):
+def iso_setup(sli, testcase=None, **ignore):
 
     p = iso_project.iso_project()  # create a project
 
@@ -269,21 +270,26 @@ def iso_setup(sli, solute, testcase=None, **ignore):
     aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # aquifer as boundary isotope storage
     c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
 
-    return run_iso(p, solute, sli, **ignore)
+    return run_iso(p, sli, **ignore)
 
 
-def run_testcases(test_cases, sli, solute):
+def run_testcases(test_cases, sli):
 
     delta = {}
+    d_solute = {}
     for Testcase in test_cases:
 
-        print('Testcase:', Testcase, 'Isotopologue:', solute)
+        print('Testcase:', Testcase)
         ignore = test_case(testcase=Testcase)
 
-        p, c, d = iso_setup(sli, solute=solute, testcase=Testcase, **ignore)
-        delta[Testcase] = d[solute][-1]
+        c, d = iso_setup(sli, testcase=Testcase, **ignore)
 
-    return p, delta
+        # delta at the end of simulation for each test cases
+        d_solute["2H"] = d["2H"][-1]
+        d_solute["18O"] = d["18O"][-1]
+        delta[Testcase] = d_solute
+
+    return delta
 
 
 def moisture(sli):
@@ -313,12 +319,15 @@ def moisture(sli):
     plt.show()
 
 
-solute = "18O"
-sl_iso = get_sli()
-project, delta = run_testcases([1], sl_iso, solute=solute)
-visualize(delta=delta, sli=sl_iso, Isotopologue=solute)
+slI = get_sli()
+ignore = test_case(testcase=1)
+#delta = run_testcases([1], slI)
 
-#moisture(sl_iso)
+q_v, conc, d = iso_setup(sli=slI, testcase=1, **ignore)
+#visualize(delta=delta, sli=slI, Isotopologue="2H")
+#visualize(delta=delta, sli=slI, Isotopologue="18O")
+
+#moisture(slI)
 
 
 
