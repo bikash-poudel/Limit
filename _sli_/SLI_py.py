@@ -738,6 +738,63 @@ def solve_iso(sli, dt, ignore):
             qiso_liq_adv.append(sli.qlsig(dt)[-1] * (cql[-1] + sig * dc[-1]))
             qiso_vap_adv.append(0)
 
+    
+    #####################################################################
+    # Mass Balance
+    LHS = []
+    RHS = []
+    for l in range(sli.n(dt)):
+
+        # # Coefficient of tridiagonal matrix
+        lhs = (sli.thetasat(dt)[l] - sli.thetar(dt)[l]) * sli.dx(dt)[l] / sli.dt(dt) * (dc[l] *Seff[l] + sli.ciso(dt)[l+1] * deltaSeff[l])
+        LHS.append(lhs)
+        
+        if l == 0:  # first layer
+            
+            r = sli.qprec(dt) * sli.cprec(dt) - qevapout * (cevapout + dc[l] * dcevapoutdciso) + qevapin * cevapin \
+                - sli.qlsig(dt)[l+1] * (cql[l] + dc[l] * dcqldca[l] + dc[l+1] * dcqldcb[l]) \
+                - sli.qvsig(dt)[l+1] * betaqv[l] * (cqv[l] + dc[l] * dcqvdca[l] + dc[l+1] * dcqvdcb[l]) \
+                - Dl_mean[l] *((sli.ciso(dt)[l+ 1] + dc[l]) - (sli.ciso(dt)[l+2] + dc[l+1])) / sli.deltaz(dt)[l] / sig \
+                - Dv_mean[l] * ((sli.ciso(dt)[l+1] + dc[l]) * Beta[l] - (sli.ciso(dt)[l+2] + dc[l+1]) * Beta[l+1]) / sli.deltaz(dt)[l] / sig \
+                - (sli.qex(dt)[l] + sli.qrunoff(dt)) * (sli.ciso(dt)[l+1] + dc[l]) / sig     
+                
+            RHS.append(r)
+            
+        elif l < sli.n(dt) - 1:  # Intermediate layers
+
+            r = sli.qlsig(dt)[l] * (cql[l - 1] + dc[l - 1] * dcqldca[l -1] + dc[l] * dcqldcb[l-1]) / sig \
+                + sli.qvsig(dt)[l] * betaqv[l - 1] * (cqv[l - 1] + dc[l - 1] * dcqvdca[l -1] + dc[l] * dcqvdcb[l-1])/ sig \
+                - sli.qlsig(dt)[l + 1] * (cql[l] + dc[l] * dcqldca[l] + dc[l+1] * dcqldcb[l]) / sig \
+                - sli.qvsig(dt)[l + 1] * betaqv[l] * (cqv[l] + dc[l] * dcqvdca[l] + dc[l+1] * dcqvdcb[l]) / sig \
+                + Dl_mean[l - 1] * ((sli.ciso(dt)[l] + dc[l-1]) - (sli.ciso(dt)[l + 1] + dc[l])) / sli.deltaz(dt)[l - 1] / sig  \
+                + Dv_mean[l - 1] * ((sli.ciso(dt)[l] + dc[l-1]) * Beta[l - 1] 
+                                    - (sli.ciso(dt)[l + 1] + dc[l]) * Beta[l]) / sli.deltaz(dt)[l - 1] / sig  \
+                - Dl_mean[l] * ((sli.ciso(dt)[l + 1] + dc[l]) - (sli.ciso(dt)[l + 2] + dc[l+1] )) / sli.deltaz(dt)[l] / sig  \
+                - Dv_mean[l] * ((sli.ciso(dt)[l + 1] + dc[l]) * Beta[l] 
+                                - (sli.ciso(dt)[l + 2] + dc[l+1]) * Beta[l + 1])/ sli.deltaz(dt)[l] / sig \
+                + sli.qex(dt)[l] * (sli.ciso(dt)[l + 1] + dc[l]) / sig
+
+            RHS.append(r)
+
+            
+        else:  # last layer            
+
+            r =  sli.qlsig(dt)[l] * (cql[l - 1] + dc[l-1] * dcqldca[l-1] + dc[l] * dcqldcb[l-1]) / sig \
+                + sli.qvsig(dt)[l] * betaqv[l - 1] * (cqv[l - 1] + dc[l - 1] * dcqvdca[l-1] + dc[l] * dcqvdcb[l-1] ) / sig \
+                - sli.qlsig(dt)[l + 1] * (cql[l] +dc[l])/ sig \
+                + Dl_mean[l - 1] * ((sli.ciso(dt)[l] + dc[l-1]) - (sli.ciso(dt)[l + 1] + dc[l])) / sli.deltaz(dt)[l - 1] / sig  \
+                + Dv_mean[l - 1] * ((sli.ciso(dt)[l] + dc[l-1]) * Beta[l - 1] 
+                                    - (sli.ciso(dt)[l + 1] + dc[l]) * Beta[l]) / sli.deltaz(dt)[l - 1] / sig \
+                - sli.qex(dt)[l] * (sli.ciso(dt)[l + 1] + dc[l]) / sig         
+
+            RHS.append(r)
+
+    if sli.cali(dt) > 0 or sli.testcase(dt) == '7' or sli.testcase(dt) == '8':
+        RHS[-1] = RHS[-1] - sli.qsig(dt)[-1] * (sli.cali(dt) - (cql[-1] + dc[-1])) 
+        
+    mass = max(abs(np.array(LHS) - np.array(RHS)))
+    print(mass)
+    
     Ciso = np.array(sli.ciso(dt)[1:]) + np.array(dc)
     c_delta = [concentration_to_delta(c_iso, solute) for c_iso in Ciso]
 
@@ -749,12 +806,12 @@ path = os.path.abspath(os.path.join(pth, "..", ".."))
 
 ignorealphai, ignorealphaik, ignoredl, ignoredvi = True, True, True, True
 ignore = [ignorealphai, ignorealphaik, ignoredl, ignoredvi]
-sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_1')  # imports all the variable files /variables folder: testcase-1, sig=1
+sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_2')  # imports all the variable files /variables folder: testcase-1, sig=1
 
 dciso = []
 ciso = []
 cdelta = []
-for dt in range(len(sli.get_in_soil())):
+for dt in range(632): # len(sli.get_in_soil())-1):
     
     print(dt)
    

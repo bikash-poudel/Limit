@@ -78,7 +78,7 @@ class iso_project(object):
         i_cell = iso_cell.iso_cell(location=i_point, atmosphere=atmosphere, area=area)
         self.__cells.append(i_cell)
 
-    def run(self, Isotopologue, delta_time, **kwargs):
+    def run(self, Isotopologue, delta_time, error_tol=1e-16, **kwargs):
         """
         Runs SLI for one time step. All state variables (Temperatures) and flux parameters (q_l, q_v) need to be updated before running SLI.
         After one run cycle the states of the sytem will be updated
@@ -95,17 +95,25 @@ class iso_project(object):
             b = matrix_B
             delta_c = spsolve(a, b)
 
+            # Check for mass balance
+            if not self.mass_balance(delta_c=delta_c, dt=delta_time,
+                                 Isotopologue=Isotopologue, tolerance=error_tol, **kwargs):
+
+                raise ValueError("Mass balance exceeded the tolerance")
+            else:
+                return delta_c
+
         except ValueError as err:
             print(err)
             raise NotImplementedError
 
-        return delta_c
-
     def coeff_matrix(self, Isotopologue, delta_time, **kwargs):
 
         try:
-            A, B = self.flux_matrix(Isotopologue=Isotopologue, **kwargs)
             storages = list(self.get_iso_storages())
+
+            A = lil_matrix((len(storages), len(storages)))  # create a n x n matrix
+            B = np.zeros(len(storages))
 
             for i_storage in storages:
                 s_index = storages.index(i_storage)
@@ -114,23 +122,16 @@ class iso_project(object):
                                                                        **kwargs) / delta_time
                 B[s_index] += i_storage.get_storage_i(Isotopologue=Isotopologue,
                                                       **kwargs) / delta_time
-
         except ValueError as err:
             print(err)
             raise NotImplementedError
 
-        return A, B
+        return self.flux_matrix(A, B, storages, Isotopologue=Isotopologue, **kwargs)
 
-    def flux_matrix(self, Isotopologue, **kwargs):
+    def flux_matrix(self, A, B, storages, Isotopologue, **kwargs):
 
         try:
-            storages = list(self.get_iso_storages())
-            connections = self.get_flux_connections()
-
-            A = lil_matrix((len(storages), len(storages)))  # create a n x n matrix
-            B = np.zeros(len(storages))  # current storage
-
-            for c in connections:
+            for c in self.get_flux_connections():
 
                 if isinstance(c, iso_fluxes.boundary_connection):
 
@@ -171,4 +172,101 @@ class iso_project(object):
             raise NotImplementedError
 
         return A, B
+
+    def mass_balance(self, delta_c, dt, Isotopologue, tolerance=1e-16, **kwargs):
+
+        try:
+            LHS = self.storage_mass(delta_c=delta_c, dt=dt, Isotopologue=Isotopologue, **kwargs)
+            RHS = self.flux_mass(delta_c=delta_c, Isotopologue=Isotopologue, **kwargs)
+
+            print(max(abs(np.array(LHS) - np.array(RHS))))
+
+            if max(abs(np.array(LHS) - np.array(RHS))) <= tolerance:
+                return True
+            elif max(abs(np.array(LHS) - np.array(RHS))) > tolerance:
+                return False
+            else:
+                raise ValueError
+
+        except ValueError:
+            raise NotImplementedError
+
+    def storage_mass(self, delta_c, dt, Isotopologue, **kwargs):
+
+        try:
+            storages = list(self.get_iso_storages())  # current storage
+
+            mass = []
+            for i, s in enumerate(storages):
+
+                # s_eff = s.eff_saturation(Isotopologue=Isotopologue, **kwargs)
+                # d_s_eff = s.del_eff_saturation(Isotopologue=Isotopologue, **kwargs)
+                # c = s.get_conc_iso_liquid(Isotopologue=Isotopologue)
+
+                m = (s.get_storage_i(Isotopologue=Isotopologue, **kwargs) +
+                     s.get_eff_liquid_volume(Isotopologue=Isotopologue, **kwargs) * delta_c[i]) / dt
+
+                mass.append(m)
+
+        except ValueError:
+            raise NotImplementedError
+
+        return mass
+
+    def flux_mass(self, delta_c, Isotopologue, **kwargs):
+
+        try:
+            storages = list(self.get_iso_storages())  # current storage
+            connections = self.get_flux_connections()
+
+            mass = np.zeros(len(storages))
+            for c in connections:
+
+                if isinstance(c, iso_fluxes.boundary_connection):
+
+                    # check which storage node is connected to boundary
+                    if isinstance(c.left_node, iso_storages.iso_storage):
+                        s = c.left_node
+                    elif isinstance(c.right_node, iso_storages.iso_storage):
+                        s = c.right_node
+                    else:
+                        raise ValueError("Boundary connection should have one node connected to iso_storage")
+
+                    index_s = storages.index(s)
+
+                    mass[index_s] -= c.calc_flux_i(Isotopologue=Isotopologue, **kwargs) + \
+                                     c.calc_flux_liquid(Isotopologue=Isotopologue) * delta_c[index_s]
+
+                else:
+                    index_l = storages.index(c.left_node)  # index of left storage node
+                    index_r = storages.index(c.right_node)  # index of right storage node
+
+                    if isinstance(c, (iso_fluxes.liquid_advection, iso_fluxes.vapor_advection)):
+
+                        mass[index_l] -= c.calc_flux_i(Isotopologue=Isotopologue, **kwargs) + \
+                                         c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs) \
+                                         * (delta_c[index_l] + delta_c[index_r])
+
+                        mass[index_r] += c.calc_flux_i(Isotopologue=Isotopologue, **kwargs) + \
+                                         c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs) * (
+                                                 delta_c[index_l] + delta_c[index_r])
+
+                    elif isinstance(c, (iso_fluxes.liquid_diffusion, iso_fluxes.vapor_diffusion)):
+
+                        mass[index_l] -= c.calc_flux_i(Isotopologue=Isotopologue, **kwargs) + \
+                                         c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs) \
+                                         * (delta_c[index_l] - delta_c[index_r])
+
+                        mass[index_r] += c.calc_flux_i(Isotopologue=Isotopologue, **kwargs) + \
+                                         c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs) \
+                                         * (delta_c[index_l] - delta_c[index_r])
+
+                    else:
+                        raise ValueError("storage connections should be either advection or diffusion")
+
+        except ValueError:
+            raise NotImplementedError
+
+        return mass
+
 

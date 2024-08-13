@@ -626,6 +626,7 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
         return dv_i_mean
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
+
         T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
         T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
 
@@ -660,12 +661,24 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
             flux_i = self.right_node.get_conc_iso_vapor(Isotopologue) * flux
 
         """
-        flux = self.calc_flux(Isotopologue, **kwargs)
-        beta_left = self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
-        beta_right = self.right_node.beta(Isotopologue=Isotopologue, **kwargs)
 
-        flux_i = flux * (self.left_node.get_conc_iso_liquid(Isotopologue) * beta_left
-                         - self.right_node.get_conc_iso_liquid(Isotopologue) * beta_right)
+        T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
+        T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
+
+        dT_mean = T_mean - T_mean_0
+
+        alpha_i_mean = self.left_node.alpha_i(Isotopologue=Isotopologue, T=T_mean, **kwargs)
+        d_beta_mean = self.left_node.d_beta(Isotopologue=Isotopologue, T=T_mean, dT=dT_mean, **kwargs)
+
+        beta_mean = alpha_i_mean + d_beta_mean
+
+        flux = self.calc_flux(Isotopologue, **kwargs)
+
+        # beta_left = self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
+        # beta_right = self.right_node.beta(Isotopologue=Isotopologue, **kwargs)
+
+        flux_i = flux * (self.left_node.get_conc_iso_liquid(Isotopologue)
+                         - self.right_node.get_conc_iso_liquid(Isotopologue)) * beta_mean
 
         return flux_i
 
@@ -863,12 +876,24 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
             flux_i = right_node.get_conc_iso_vapor(Isotopologue) * flux
 
         """
-        flux = self.get_flux()
-        beta_leftnode = self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
-        beta_rightnode = self.right_node.beta(Isotopologue=Isotopologue, **kwargs)
 
-        cqv = 0.5 * (self.left_node.get_conc_iso_liquid(Isotopologue) * beta_leftnode
-                     + self.right_node.get_conc_iso_liquid(Isotopologue) * beta_rightnode)
+        T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
+        T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
+
+        dT_mean = T_mean - T_mean_0
+
+        alpha_i_mean = self.left_node.alpha_i(Isotopologue=Isotopologue, T=T_mean, **kwargs)
+        d_beta_mean = self.left_node.d_beta(Isotopologue=Isotopologue, T=T_mean, dT=dT_mean, **kwargs)
+
+        beta_mean = alpha_i_mean + d_beta_mean
+
+        flux = self.get_flux()
+
+        # beta_leftnode = self.left_node.beta(Isotopologue=Isotopologue, **kwargs)
+        # beta_rightnode = self.right_node.beta(Isotopologue=Isotopologue, **kwargs)
+
+        cqv = 0.5 * (self.left_node.get_conc_iso_liquid(Isotopologue)
+                     + self.right_node.get_conc_iso_liquid(Isotopologue)) * beta_mean
 
         # SLI: dv = Dvs ; dv_i = Divs ; 1/b_i = alphak_vdiff
         betaq = self.dv_i(dv=1, Isotopologue=Isotopologue, **kwargs)

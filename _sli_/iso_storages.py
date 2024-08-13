@@ -464,14 +464,33 @@ class iso_storage(flux_node):
 
     """Functions"""
 
+    def get_actual_liquid_volume(self):
+        """"actual volume of liquid available in the storage"""
+
+        return self.thickness * self.theta
+
+    def get_actual_vapor_volume(self):
+        """"actual volume of liquid available in the storage"""
+
+        return self.thickness * (self.theta_sat - self.theta) * self.cv
+
     def get_storage_i(self, Isotopologue, **kwargs):
         """
         @return: Returns the total amount of the isotopes
         """
-        storage_v = self.get_liquid_volume()
+        storage_v = self.get_available_liquid_volume()
         storage_i = self.get_conc_iso_liquid(Isotopologue=Isotopologue) \
                     * self.del_eff_saturation(Isotopologue=Isotopologue, **kwargs)
         return storage_v * storage_i
+
+    def get_available_liquid_volume(self):
+
+        """
+        @return: Returns the effective volume of the storage filled with liquids  in m3.
+
+        available space for liquid
+        """
+        return (self.theta_sat - self.theta_0) * self.thickness
 
     def get_eff_liquid_volume(self, Isotopologue, **kwargs):
         """
@@ -479,13 +498,6 @@ class iso_storage(flux_node):
         """
         return self.eff_saturation(Isotopologue=Isotopologue, **kwargs) \
             * (self.theta_sat - self.theta_0) * self.thickness
-
-    def get_liquid_volume(self):
-
-        """
-        @return: Returns the effective volume of the storage filled with liquids  in m3.
-        """
-        return (self.theta_sat - self.theta_0) * self.thickness
 
     def get_saturation(self):
 
@@ -542,7 +554,7 @@ class iso_storage(flux_node):
 
     def get_cv(self):
         """
-        Returns the saturated water vapor volumetric mass (m**3_H20/m**3) .
+        Returns the water vapor volumetric mass (m**3_H20/m**3) .
 
 
         rH = relative humidity in the soil air space based on the temperature and the matrix potential (Psi)

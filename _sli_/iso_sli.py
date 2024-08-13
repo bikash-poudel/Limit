@@ -68,7 +68,7 @@ def get_sli():
     path = os.path.abspath(os.path.join(pth, "..", ".."))
 
     # imports all the variable files /variables folder: testcase-1, sig=1
-    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_1')
+    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')
 
     return sli
 
@@ -88,7 +88,7 @@ def _layers(c, sli):
     psi = sli.matric_pot(dt)
 
     init_c_iso_2H = [iso_delta.delta_to_concentration(-65, '2H')] * len(lower_boundaries)  # 0.15367056287906838
-    init_c_iso_18O = [iso_delta.delta_to_concentration(-8, '18O')] * len(lower_boundaries)  # sli.civa(dt) / sli.cva(dt)
+    init_c_iso_18O = [iso_delta.delta_to_concentration(-8, '18O')] * len(lower_boundaries)
 
     id = 0
     upper_boundary = 0
@@ -125,10 +125,10 @@ def _atm(sli, testcase):
     wind_speed = sli.wind_speed(dt)
 
     if testcase == 1 or testcase == 3:
-        c_iso_2H = iso_delta.delta_to_concentration(-65, '2H')  # 0.15367056287906838
-        c_iso_18O = iso_delta.delta_to_concentration(-8, '18O')  # sli.civa(dt) / sli.cva(dt)
+        c_iso_2H = iso_delta.delta_to_concentration(-65, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
+        c_iso_18O = iso_delta.delta_to_concentration(-8, '18O')
     elif testcase in [2, 4, 5, 6]:
-        c_iso_2H = iso_delta.delta_to_concentration(-112, '2H')  # 0.15367056287906838
+        c_iso_2H = iso_delta.delta_to_concentration(-112, '2H')  # sli.civa(dt) / sli.cva(dt)  0.15367056287906838
         c_iso_18O = iso_delta.delta_to_concentration(-15, '18O')  # sli.civa(dt) / sli.cva(dt)
     else:
         raise NotImplementedError
@@ -219,31 +219,29 @@ def update_boundaries(c, sli, dt):
 def run_iso(p, sli, **kwargs):
 
     c = p.get_cells()[0]  # get current cell of project
+    solutes = ["2H"]
 
-    c_iso = {'2H': [c.conc_2H], '18O': [c.conc_18O]}
-    c_iso_delta = {'2H': [c.conc_2H_delta], '18O': [c.conc_18O_delta]}
+    c_iso = {'2H': [], '18O': []}
+    c_iso_delta = {'2H': [], '18O': []}
 
-    solutes = ["2H", "18O"]
-
-    for dt in range(1, 5000):  #len(sli.get_in_soil())):  # starting from next time step (n+1)
+    for dt in range(1, len(sli.get_in_soil())-1):  # starting from next time step (n+1)
         print(dt)
+
+        c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
+        c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
+
         # update storage states and boundaries to current time
         update_storages(c, sli, dt), update_boundaries(c, sli, dt)
 
         for solute in solutes:
 
             delta_t = sli.dt(dt)
-            dc = p.run(Isotopologue=solute, delta_time=delta_t, **kwargs)
+            dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-11, **kwargs)
 
-            current_conc = c.get_conc_layers(Isotopologue=solute)
-            c_t = list(np.array(current_conc) + np.array(dc))
-            delta = [iso_delta.concentration_to_delta(c_iso, solute) for c_iso in c_t]
+            c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
+            c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to next time step
 
-            c_iso[solute].append(c_t), c_iso_delta[solute].append(delta)
-
-            c.update_c_layers(conc_iso=c_t, Isotopologue=solute)
-
-    return c_iso, c_iso_delta
+    return c_iso_delta
 
 
 def iso_setup(sli, testcase=None, **kwargs):
@@ -271,18 +269,19 @@ def iso_setup(sli, testcase=None, **kwargs):
 def run_testcases(test_cases, sli):
 
     delta = {}
-    d_solute = {}
     for Testcase in test_cases:
 
         print('Testcase:', Testcase)
         cases = test_case(testcase=Testcase)
 
-        c, d = iso_setup(sli, testcase=Testcase, **cases)
+        delta[Testcase] = {}
+        delta[Testcase] = {}
+
+        d = iso_setup(sli, testcase=Testcase, **cases)
 
         # delta at the end of simulation for each test cases
-        d_solute["2H"] = d["2H"][-1]
-        d_solute["18O"] = d["18O"][-1]
-        delta[Testcase] = d_solute
+        delta[Testcase]["2H"] = d["2H"][-1]
+        delta[Testcase]["18O"] = d["18O"][-1]
 
     return delta
 
@@ -315,13 +314,13 @@ def moisture(sli):
 
 
 slI = get_sli()
-ignore = test_case(testcase=1)
-#delta = run_testcases([1], slI)
 
-conc, d = iso_setup(sli=slI, testcase=1, **ignore)
-#visualize(delta=delta, sli=slI, Isotopologue="2H")
-#visualize(delta=delta, sli=slI, Isotopologue="18O")
+delta = run_testcases([1, 2, 3, 4, 5, 6], slI)
+visualize(delta=delta, sli=slI, Isotopologue="2H")
+visualize(delta=delta, sli=slI, Isotopologue="18O")
 
+#ignore = test_case(testcase=1)
+#d = iso_setup(sli=slI, testcase=2, **ignore)
 #moisture(slI)
 
 

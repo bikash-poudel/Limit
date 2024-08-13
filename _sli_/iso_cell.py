@@ -9,6 +9,7 @@ import iso_fluxes
 import vapor_flux
 import iso_delta
 
+
 class iso_cell(object):
     """
     Description
@@ -340,7 +341,7 @@ class iso_cell(object):
 
     @property
     def storage_connections(self):
-        return self.connections_l_diff + self.connections_v_diff + self.connections_l_adv + self.connections_v_adv
+        return self.connections_l_adv + self.connections_v_adv + self.connections_l_diff + self.connections_v_diff
 
     @property
     def boundary_connections(self):
@@ -565,8 +566,8 @@ class iso_cell(object):
             atm.set_conc_iso_vapor(c_atm['18O'], '18O')
 
             self.__atmosphere = atm
-        except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+        except ValueError:
+            raise NotImplementedError("A required value was not provided.")
 
     def update_layers(self, theta, T, rH, psi):
 
@@ -736,10 +737,10 @@ class iso_cell(object):
                 for qtrans, c_trans in zip(self.q_transpiration, self.connections_transpiration):
                     c_trans.ql_transpiration = qtrans
             else:
-                return ("Number of liquid fluxes must be equal to the flux connections")
+                return "Number of liquid fluxes must be equal to the flux connections"
 
         except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+            raise NotImplementedError("A required value was not provided.")
 
     def update_precipitation(self, q_prec=0.0, c_prec={"2H": 1.0, "18O": 1.0}):
 
@@ -775,7 +776,7 @@ class iso_cell(object):
             self.connection_runoff.q_runoff = self.q_runoff
 
         except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+            raise NotImplementedError("A required value was not provided.")
 
     def update_connection_to_aquifer(self, ql_layer=0.0):
 
@@ -801,7 +802,7 @@ class iso_cell(object):
             self.connection_to_aquifer.ql = ql_aq
 
         except ValueError as err:
-            raise NotImplementedError("A required value was not provided.") from err
+            raise NotImplementedError("A required value was not provided.")
 
 
 
