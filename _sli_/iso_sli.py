@@ -15,6 +15,33 @@ import iso_delta
 import matplotlib.pyplot as plt
 
 
+def moisture(sli):
+
+    n_timesteps = len(sli.get_scaler())
+
+    ql = np.array(sli.qlsig(n_timesteps - 1)) * 1000 * 86400
+    qv = np.array(sli.qvsig(n_timesteps - 1)) * 1000 * 86400
+    theta = sli.theta(n_timesteps - 1)
+
+    depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
+    centers = -(depth[:-1] + depth[1:]) / 2.0
+    d = centers.tolist()[:10]
+
+    plt.plot(theta[:10], d)
+    plt.xlabel('m3 m-3')
+    plt.ylabel('depth m')
+    plt.title('moisture at 250-day')
+    plt.show()
+
+    plt.plot(ql[:10], d, label='ql')
+    plt.plot(qv[:10], d, label='qv')
+    plt.xlabel('mm per day')
+    plt.ylabel('depth m')
+    plt.title('moisture_flux at 250-day')
+    plt.legend()
+    plt.show()
+
+
 def visualize(delta, sli, Isotopologue):
 
     depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
@@ -22,11 +49,10 @@ def visualize(delta, sli, Isotopologue):
     d = centers.tolist()[:10]
 
     for case in delta.keys():
-
         plt.plot(delta[case][Isotopologue][:10], d, label='testcase_{}'.format(case))
-        #plt.plot(delta[2][:10], d, label='testcase_2')
+        # plt.plot(delta[2][:10], d, label='testcase_2')
 
-    #plt.xlim([-15, 15])
+    # plt.xlim([-15, 15])
     plt.xlabel('delta_{}'.format(Isotopologue))
     plt.ylabel('depth [m]')
     plt.title('initial testcases after 250 days')
@@ -36,7 +62,6 @@ def visualize(delta, sli, Isotopologue):
 
 
 def test_case(testcase=1):
-
     ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True,
               'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
 
@@ -50,7 +75,7 @@ def test_case(testcase=1):
         ignore['ignoredli'] = False
 
         return ignore
-    elif testcase == 6:
+    elif testcase in [6, 7, 8]:
 
         ignore['ignorealphai'] = False
         ignore['ignoredli'] = False
@@ -63,17 +88,18 @@ def test_case(testcase=1):
         raise NotImplementedError
 
 
-def get_sli():
+def get_sli(testcase=1):
+
     pth = os.getcwd()
     path = os.path.abspath(os.path.join(pth, "..", ".."))
 
     # imports all the variable files /variables folder: testcase-1, sig=1
-    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables')
+    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_7'.format(testcase))
 
     return sli
 
 
-def _layers(c, sli):
+def _layers(c, sli, testcase):
 
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
@@ -87,13 +113,21 @@ def _layers(c, sli):
     rH = sli.R_humidity(dt)
     psi = sli.matric_pot(dt)
 
-    init_c_iso_2H = [iso_delta.delta_to_concentration(-65, '2H')] * len(lower_boundaries)  # 0.15367056287906838
-    init_c_iso_18O = [iso_delta.delta_to_concentration(-8, '18O')] * len(lower_boundaries)
+    if testcase in [1, 2, 3, 4, 5, 6]:
+        init_c_iso_2H = [iso_delta.delta_to_concentration(-65, '2H')] * len(lower_boundaries)  # 0.15367056287906838
+        init_c_iso_18O = [iso_delta.delta_to_concentration(-8, '18O')] * len(lower_boundaries)
+
+    elif testcase in [7, 8]:
+        init_c_iso_2H = [iso_delta.delta_to_concentration(0, '2H')] * len(lower_boundaries)  # 0.15367056287906838
+        init_c_iso_18O = [iso_delta.delta_to_concentration(0, '18O')] * len(lower_boundaries)
+    else:
+        raise ValueError
 
     id = 0
     upper_boundary = 0
     for lower_boundary, c2H, c18O, th, tr, tsat, tor, T, r_H, PSI in \
-            zip(lower_boundaries, init_c_iso_2H, init_c_iso_18O, theta, theta_r, theta_sat, tortuosity, T_soil, rH, psi):
+            zip(lower_boundaries, init_c_iso_2H, init_c_iso_18O, theta, theta_r, theta_sat, tortuosity, T_soil, rH,
+                psi):
         new_layer = iso_storages.iso_soil_layer(ID=id,
                                                 upper_boundary=upper_boundary,
                                                 lower_boundary=lower_boundary,
@@ -130,6 +164,9 @@ def _atm(sli, testcase):
     elif testcase in [2, 4, 5, 6]:
         c_iso_2H = iso_delta.delta_to_concentration(-112, '2H')  # sli.civa(dt) / sli.cva(dt)  0.15367056287906838
         c_iso_18O = iso_delta.delta_to_concentration(-15, '18O')  # sli.civa(dt) / sli.cva(dt)
+    elif testcase in [7, 8]:
+        c_iso_2H = iso_delta.delta_to_concentration(-100, '2H')  # sli.civa(dt) / sli.cva(dt)  0.15367056287906838
+        c_iso_18O = iso_delta.delta_to_concentration(-14, '18O')  # sli.civa(dt) / sli.cva(dt)
     else:
         raise NotImplementedError
 
@@ -148,7 +185,6 @@ def _atm(sli, testcase):
 
 
 def update_storages(c, sli, dt):
-
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     # Need not update atmosphere
@@ -174,8 +210,8 @@ def update_storages(c, sli, dt):
     h0 = sli.pond_height(dt)
     c.update_pond(pond_height=h0)
 
-    c_aquifer = sli.cali(dt)
-    c.update_aquifer(c_iso={"2H": 1.0, "18O": c_aquifer})
+    #c_aquifer = sli.cali(dt)
+    c.update_aquifer(c_iso={"2H": 0.0, "18O": 0.0})
 
 
 def update_boundaries(c, sli, dt):
@@ -218,13 +254,11 @@ def update_boundaries(c, sli, dt):
 
 def run_iso(p, sli, **kwargs):
 
+    solutes = ["2H", "18O"]
     c = p.get_cells()[0]  # get current cell of project
-    solutes = ["2H"]
 
-    c_iso = {'2H': [], '18O': []}
-    c_iso_delta = {'2H': [], '18O': []}
-
-    for dt in range(1, len(sli.get_in_soil())-1):  # starting from next time step (n+1)
+    c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
+    for dt in range(1, len(sli.get_in_soil()) - 1):  # starting from next time step (n+1)
         print(dt)
 
         c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
@@ -239,35 +273,34 @@ def run_iso(p, sli, **kwargs):
             dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-11, **kwargs)
 
             c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
-            c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to next time step
+            c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to current time step
 
     return c_iso_delta
 
 
-def iso_setup(sli, testcase=None, **kwargs):
+def iso_setup(sli, testcase=1, **kwargs):
+
+    # Define boundary storages
+    atm = _atm(sli, testcase)  # atmosphere
+    pd = iso_storages.iso_pond(pond_height=0)  # define pond
+    aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # define aquifer as boundary isotope storage
 
     p = iso_project.iso_project()  # create a project
-
-    atm = _atm(sli, testcase)  # atmosphere
     p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
-    c = p.get_cells()[0]
-    _layers(c, sli)  # add soil layers to the new cell
-    c.install_connections()  # flux connections between the layers
 
-    pd = iso_storages.iso_pond(pond_height=0)
-    c.add_pond(pd)
+    c = p.get_cells()[0]  # get current cell
+    _layers(c, sli, testcase=testcase),  # add layers to the current cell
 
+    #####Install connections#######
+    c.install_connections()  # install storage connections between the layers
     # boundary connections
-    c.add_evaporation(), c.add_transpiration(), c.add_surface_runoff(), c.add_precipitation()
-
-    aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # aquifer as boundary isotope storage
-    c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
+    c.add_evaporation(), c.add_transpiration(), c.add_surface_runoff()
+    c.add_precipitation(), c.add_pond(pd), c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
 
     return run_iso(p, sli, **kwargs)
 
 
-def run_testcases(test_cases, sli):
-
+def run_testcases(test_cases):
     delta = {}
     for Testcase in test_cases:
 
@@ -277,6 +310,7 @@ def run_testcases(test_cases, sli):
         delta[Testcase] = {}
         delta[Testcase] = {}
 
+        sli = get_sli(testcase=Testcase)
         d = iso_setup(sli, testcase=Testcase, **cases)
 
         # delta at the end of simulation for each test cases
@@ -286,42 +320,34 @@ def run_testcases(test_cases, sli):
     return delta
 
 
-def moisture(sli):
+def slope(testcase, delta):
 
-    n_timesteps = len(sli.get_scaler())
+    d_2H_ali, d_2H_atm = iso_delta.delta_testcases(Isotopologue="2H", testcase=testcase)
+    d_18O_ali, d_18O_atm = iso_delta.delta_testcases(Isotopologue="18O", testcase=testcase)
 
-    ql = np.array(sli.qlsig(n_timesteps - 1)) * 1000 * 86400
-    qv = np.array(sli.qvsig(n_timesteps - 1)) * 1000 * 86400
-    theta = sli.theta(n_timesteps - 1)
+    d_2H_sim, d_18O_sim = delta[testcase]["2H"][0], delta[testcase]["18O"][0]
 
-    depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
-    centers = -(depth[:-1] + depth[1:]) / 2.0
-    d = centers.tolist()[:10]
+    slope_initial = (d_2H_ali - d_2H_atm) / (d_18O_ali - d_18O_atm)
+    slope_sim = (d_2H_sim - d_2H_atm) / (d_18O_sim - d_18O_atm)
 
-    plt.plot(theta[:10], d)
-    plt.xlabel('m3 m-3')
-    plt.ylabel('depth m')
-    plt.title('moisture at 250-day')
-    plt.show()
-
-    plt.plot(ql[:10], d, label='ql')
-    plt.plot(qv[:10], d, label='qv')
-    plt.xlabel('mm per day')
-    plt.ylabel('depth m')
-    plt.title('moisture_flux at 250-day')
-    plt.legend()
-    plt.show()
+    return slope_initial, slope_sim
 
 
-slI = get_sli()
+def enrichment_max(Isotopologue, testcase, delta):
 
-delta = run_testcases([1, 2, 3, 4, 5, 6], slI)
-visualize(delta=delta, sli=slI, Isotopologue="2H")
-visualize(delta=delta, sli=slI, Isotopologue="18O")
+    delta_soil, delta_vap = iso_delta.delta_testcases(Isotopologue=Isotopologue, testcase=testcase)
 
-#ignore = test_case(testcase=1)
-#d = iso_setup(sli=slI, testcase=2, **ignore)
-#moisture(slI)
+    return max(abs(np.array(delta[testcase][Isotopologue]) - delta_soil))
 
+
+#delta = run_testcases([7])
+
+# slI = get_sli()
+# visualize(delta=delta, sli=slI, Isotopologue="2H")
+# visualize(delta=delta, sli=slI, Isotopologue="18O")
+
+# ignore = test_case(testcase=1)
+# d = iso_setup(sli=slI, testcase=2, **ignore)
+# moisture(slI)
 
 

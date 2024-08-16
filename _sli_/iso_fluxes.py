@@ -1054,7 +1054,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
     cv_surface = property(get_cv_surface, None, None, "concentration of water vapour at soil/air interface")
 
     def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz",
-                          **kwargs):
+                          BA83=False, **kwargs):
 
         """
         Calculates the concentration of minor isotopologue in liquid water at the surface (kg/m3_H2O)
@@ -1064,7 +1064,11 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+        if BA83:  # analytical solution for Barnes and Allison (1983)  saturated case
+            nk = 1
+        else:
+            nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation=formulation_alpha_i_k, **kwargs)
 

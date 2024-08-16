@@ -425,7 +425,14 @@ def solve_iso(sli, dt, ignore):
     ###### Soil Littre iso: SUBROUTINE (isotope_vap)
 
     ignorealphai, ignorealphaik, ignoredl, ignoredvi = ignore
-    solute = '18O' #len(sli.get_in_soil())-1
+    
+    if sli.isotopologue(dt) == '1':        
+        solute = '2H'     
+    elif sli.isotopologue(dt) == '2':
+        solute = '18O'
+    else:
+        raise ValueError
+    
 
     sig = sli.sig(dt)
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli
@@ -507,7 +514,13 @@ def solve_iso(sli, dt, ignore):
         if l == 0:  # 1st layer,  Sli: checked            
                 
             ## diffusional fractionation factor in air
-            nk = n_k(sli.thetasat(dt)[l], S)
+            if sli.testcase(dt) == '7' or sli.testcase(dt) == '8':                
+                nk = 1
+            elif sli.testcase(dt) in ['1', '2', '3', '4', '5', '6']:
+                nk = n_k(sli.thetasat(dt)[l], S)
+            else:
+                raise ValueError
+            
             Divs = dv_i(sli.Ts(dt) + Tzero_sli, solute, Pa=patm, ignore_dv_i=ignoredvi)
             Dvs = dv(sli.Ts(dt) + Tzero_sli, Pa=patm)
             alphak = alpha_k(Dvs, Divs, nk, ignore_alpha_k=ignorealphaik)           
@@ -793,32 +806,33 @@ def solve_iso(sli, dt, ignore):
         RHS[-1] = RHS[-1] - sli.qsig(dt)[-1] * (sli.cali(dt) - (cql[-1] + dc[-1])) 
         
     mass = max(abs(np.array(LHS) - np.array(RHS)))
-    print(mass)
+    print(sli.testcase(dt), sli.dt(dt))
     
     Ciso = np.array(sli.ciso(dt)[1:]) + np.array(dc)
     c_delta = [concentration_to_delta(c_iso, solute) for c_iso in Ciso]
 
-    return [Ciso, c_delta]
+    return dc, Ciso, c_delta
 
 
 pth = os.getcwd()
 path = os.path.abspath(os.path.join(pth, "..", ".."))
 
-ignorealphai, ignorealphaik, ignoredl, ignoredvi = True, True, True, True
+ignorealphai, ignorealphaik, ignoredl, ignoredvi = False, False, False, False
 ignore = [ignorealphai, ignorealphaik, ignoredl, ignoredvi]
-sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_2')  # imports all the variable files /variables folder: testcase-1, sig=1
+sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_7')  # imports all the variable files /variables folder: testcase-1, sig=1
 
-dciso = []
+d_c = []
 ciso = []
 cdelta = []
-for dt in range(632): # len(sli.get_in_soil())-1):
+for dt in range(len(sli.get_in_soil())-1):
     
     print(dt)
    
-    c, d = solve_iso(sli, dt, ignore)
+    dc, c, d = solve_iso(sli, dt, ignore)
     #print(c.tolist())
-    dciso.append(d)
-    ciso.append(c)    
+    d_c.append(dc)
+    ciso.append(c)
+    cdelta.append(d)    
     #print(d, c.tolist())
 
 print(ciso)

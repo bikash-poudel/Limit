@@ -92,3 +92,20 @@ def ratio_to_delta(R_i, solute_i, R_ref={"2H": 0.00015576, "18O": 0.00200520}):
     return delta_i
 
 
+def delta_testcases(Isotopologue, testcase=1):
+
+    # delta signature in alimentation water
+
+    delta_ali = {"2H": -65, "18O": -8}
+
+    # delta signature in atmospheric vapor
+    if testcase in [1, 3]:
+        delta_atm = {"2H": -65, "18O": -8}
+    elif testcase in [2, 4, 5, 6]:
+        delta_atm = {"2H": -112, "18O": -15}
+
+    else:
+        raise ValueError
+
+    return delta_ali[Isotopologue], delta_atm[Isotopologue]
+

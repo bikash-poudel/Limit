@@ -4,7 +4,6 @@ Created on 20.06.2024
 @author: poudel-b
 '''
 # -*- coding: utf-8 -*-
-from __future__ import division
 
 import numpy as np
 from scipy.sparse import lil_matrix
@@ -97,7 +96,7 @@ class iso_project(object):
 
             # Check for mass balance
             if not self.mass_balance(delta_c=delta_c, dt=delta_time,
-                                 Isotopologue=Isotopologue, tolerance=error_tol, **kwargs):
+                                     Isotopologue=Isotopologue, tolerance=error_tol, **kwargs):
 
                 raise ValueError("Mass balance exceeded the tolerance")
             else:
@@ -196,17 +195,16 @@ class iso_project(object):
         try:
             storages = list(self.get_iso_storages())  # current storage
 
-            mass = []
-            for i, s in enumerate(storages):
+            if len(storages) != len(delta_c):
+                raise ValueError("mismatch length of storages and concentration")
+            else:
+                mass = []
+                for i, s in enumerate(storages):
 
-                # s_eff = s.eff_saturation(Isotopologue=Isotopologue, **kwargs)
-                # d_s_eff = s.del_eff_saturation(Isotopologue=Isotopologue, **kwargs)
-                # c = s.get_conc_iso_liquid(Isotopologue=Isotopologue)
+                    m = (s.get_storage_i(Isotopologue=Isotopologue, **kwargs) +
+                         s.get_eff_liquid_volume(Isotopologue=Isotopologue, **kwargs) * delta_c[i]) / dt
 
-                m = (s.get_storage_i(Isotopologue=Isotopologue, **kwargs) +
-                     s.get_eff_liquid_volume(Isotopologue=Isotopologue, **kwargs) * delta_c[i]) / dt
-
-                mass.append(m)
+                    mass.append(m)
 
         except ValueError:
             raise NotImplementedError
@@ -217,10 +215,9 @@ class iso_project(object):
 
         try:
             storages = list(self.get_iso_storages())  # current storage
-            connections = self.get_flux_connections()
 
             mass = np.zeros(len(storages))
-            for c in connections:
+            for c in self.get_flux_connections():
 
                 if isinstance(c, iso_fluxes.boundary_connection):
 
@@ -268,5 +265,3 @@ class iso_project(object):
             raise NotImplementedError
 
         return mass
-
-
