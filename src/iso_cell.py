@@ -64,6 +64,7 @@ class iso_cell(object):
         self.__c_precipitation = {"2H": 1.0, "18O": 1.0}  # iso conc in precipitation
         self.__q_neuman = 0.0  # neuman flux
         self.__c_neuman = {"2H": 1.0, "18O": 1.0}  # iso conc in neuman flux
+        self.__c_dirichlet = {"2H": 1.0, "18O": 1.0}  # iso conc as dirichlet boundary
 
         self.__pond = None
 
@@ -88,6 +89,7 @@ class iso_cell(object):
         self.__connection_runoff = None
         self.__connection_to_aquifer = None
         self.__connection_neuman = None
+        self.__connection_dirichlet = None
 
     """Properties"""
 
@@ -158,7 +160,6 @@ class iso_cell(object):
 
     @property
     def iso_storages(self):
-
         """
         Returns all the flux nodes that are the instances of iso_storages
         -------
@@ -253,14 +254,6 @@ class iso_cell(object):
         return self.__c_precipitation
 
     @property
-    def q_neuman(self):
-        return self.__q_neuman
-
-    @property
-    def c_neuman(self):
-        return self.__c_neuman
-
-    @property
     def q_runoff(self):
         """
         @return: Returns the surface runoff flux.
@@ -275,6 +268,18 @@ class iso_cell(object):
 
         """
         return self.__transpiration
+
+    @property
+    def q_neuman(self):
+        return self.__q_neuman
+
+    @property
+    def c_neuman(self):
+        return self.__c_neuman
+
+    @property
+    def c_dirichlet(self):
+        return self.__c_dirichlet
 
     @property
     def connections_l_diff(self):
@@ -357,6 +362,14 @@ class iso_cell(object):
         return self.__connection_neuman
 
     @property
+    def connection_dirichlet(self):
+        """
+        @return: Returns the dirichlet boundary connection related.
+
+        """
+        return self.__connection_dirichlet
+
+    @property
     def storage_connections(self):
         return self.connections_l_adv + self.connections_v_adv + self.connections_l_diff + self.connections_v_diff
 
@@ -404,6 +417,15 @@ class iso_cell(object):
             raise NotImplementedError
 
     """Functions"""
+    def get_conc_layers(self, Isotopologue):
+
+        """"List of Isotope concentration in layers """
+
+        c = []
+        for l in self.__layers:
+            c.append(l.get_conc_iso_liquid(Isotopologue))
+
+        return c
 
     def add_layer(self, new_layer):
         try:
@@ -579,15 +601,23 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
 
-    def get_conc_layers(self, Isotopologue):
+    def add_dirichlet_boundary(self, soil_layer):
+        """
+        Assign boundary connection eq: atmosphere etc..
 
-        """"List of Isotope concentration in layers """
+        Returns
+        -------
+        """
+        try:
+            # Assign dirichlet  boundary
 
-        c = []
-        for l in self.__layers:
-            c.append(l.get_conc_iso_liquid(Isotopologue))
+            dr = iso_fluxes.dirichlet_boundary(atmosphere=self.atmosphere, soil_layer=soil_layer,
+                                               c_layer=self.c_dirichlet)
 
-        return c
+            self.__connection_dirichlet = dr
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
 
     """"Update storages"""
 
@@ -864,3 +894,24 @@ class iso_cell(object):
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
+
+    def update_dirichlet_boundary(self, c_dirichlet={"2H": 1.0, "18O": 1.0}):
+
+        """
+        Updates the neuman flux to current time step
+
+        Returns
+        -------
+        """
+        try:
+            self.__c_dirichlet = c_dirichlet
+            self.__connection_dirichlet.ci_dirichlet = self.c_dirichlet
+
+            self.connection_dirichlet.set_conc_dirichlet(self.c_dirichlet["2H"], "2H")
+            self.connection_dirichlet.set_conc_dirichlet(self.c_dirichlet["18O"], "18O")
+
+        except ValueError:
+            raise NotImplementedError("A required value was not provided.")
+
+
+

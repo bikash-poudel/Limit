@@ -174,7 +174,7 @@ class iso_project(object):
             LHS = self.storage_mass(delta_c=delta_c, dt=dt, Isotopologue=Isotopologue, **kwargs)
             RHS = self.flux_mass(delta_c=delta_c, Isotopologue=Isotopologue, **kwargs)
 
-            print('error: ', max(abs(np.array(LHS) - np.array(RHS))))
+            #print('error: ', max(abs(np.array(LHS) - np.array(RHS))))
 
             if tolerance is not None:
                 if max(abs(np.array(LHS) - np.array(RHS))) > tolerance:

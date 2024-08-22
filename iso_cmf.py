@@ -1,9 +1,26 @@
+
 import cmf
 
 from datetime import datetime, timedelta
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 from src import *
+
+
+def visualize(p, delta, Isotopologue='2H', testcase=1):
+
+    depth = [-l.center.z for l in p.get_cells()[0].layers]
+
+    plt.plot(delta[Isotopologue][-1], depth, label='testcase_{}'.format(testcase))
+
+    plt.xlabel('delta_{}'.format(Isotopologue))
+    plt.ylabel('depth [m]')
+    plt.title('initial testcases after 250 days')
+    plt.legend()
+    plt.gca().set_aspect(aspect=150)
+    plt.show()
 
 
 def test_case(testcase=1):
@@ -171,7 +188,9 @@ def update_boundaries(c_iso, c_cmf, time):
     c_iso.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed internally, else list of qv, len = len(layers)
 
     # boundary storage
-    c_iso.update_neuman_boundary(q_neuman=0.0, c_neuman={"2H": 1.0, "18O": 1.0})
+    c_iso_2H = iso_delta.delta_to_concentration(-0, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
+    c_iso_18O = iso_delta.delta_to_concentration(-0, '18O')
+    c_iso.update_dirichlet_boundary(c_dirichlet={"2H": c_iso_2H, "18O": c_iso_18O})
 
 
 def iso_setup():
@@ -190,12 +209,17 @@ def iso_setup():
 
     #####Install connections#######
     c.install_connections()  # install storage connections between the layers
-    c.add_neuman_boundary(soil_layer=c.layers[0])
+    c.add_dirichlet_boundary(soil_layer=c.layers[0])
 
     return p, P
 
 
-def run(p, P, **kwargs):
+def run(p, P, sim_period=50, dt=1, **kwargs):
+
+    """"
+    sim_period: days
+    dt: hours
+    """
 
     C = P.cells[0]  # current cell cmf_project
     c = p.get_cells()[0]  # current cell of iso_project
@@ -203,30 +227,37 @@ def run(p, P, **kwargs):
     # Define solver
     solver = cmf.CVodeBanded(P, 1e-6)
     start = datetime(2024, 1, 1)
-    end = datetime(2024, 10, 30)
-    timestep = timedelta(hours=1)
+    end = start + timedelta(days=sim_period)
+    timestep = timedelta(hours=dt)
 
+    theta = []
     solutes = ["2H", "18O"]
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
     for t in solver.run(start, end, timestep):
-
         print(t)
+
+        t = [l.theta for l in C.layers]
+        theta.append(t)
 
         c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         update_storages(c_iso=c, c_cmf=C), update_boundaries(c_iso=c, c_cmf=C, time=solver.t)
         for solute in solutes:
-            delta_t = 3600  # dt.AsSeconds()
-            dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-11, **kwargs)
+
+            delta_t = dt * 3600  # dt.AsSeconds()
+            dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-16, **kwargs)
 
             c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
             c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to current time step
 
-    return c_iso_delta
+    return c_iso_delta, theta
 
 
 ignore = iso_delta.test_case_args(testcase=1)
 p_iso, p_cmf = iso_setup()
-delta = run(p_iso, p_cmf, **ignore)
+delta, theta = run(p_iso, p_cmf, **ignore)
+
+visualize(p_iso, delta, Isotopologue='2H')
+visualize(p_iso, delta, Isotopologue='18O')
 

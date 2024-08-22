@@ -1565,7 +1565,7 @@ class neuman_boundary(boundary_connection):
     """
     Description
     ===========
-    Flux of isotopes [kg] between two nodes (atmosphere and usoil layer).
+    Flux of isotopes [kg] between two nodes (atmosphere and soil layer).
 
     A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
 
@@ -1605,3 +1605,51 @@ class neuman_boundary(boundary_connection):
     def set_conc_neuman(self, c_neuman, Isotopologue):
 
         self.ci_neuman[Isotopologue] = c_neuman
+
+
+class dirichlet_boundary(boundary_connection):
+    """
+        Description
+        ===========
+        Flux of isotopes [kg] between two nodes (atmosphere and usoil layer).
+
+        A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+
+        """
+
+    def __init__(self,
+                 atmosphere,
+                 soil_layer,
+                 c_layer={"2H": 1.0, "18O": 1.0}
+                 ):
+
+        """
+        Constructor of evaporation
+
+        """
+        if isinstance(soil_layer, iso_storages.iso_soil_layer):
+
+            boundary_connection.__init__(self, left_node=atmosphere, right_node=soil_layer)
+
+        else:
+            raise NotImplementedError
+
+        self.soil_layer = soil_layer
+        self.ci_dirichlet = c_layer
+
+    def calc_flux(self, Isotopologue, **kwargs):
+        return 0.0
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return 0.0
+
+    def calc_flux_i(self, Isotopologue, **kwargs):
+
+        return 0.0
+
+    def set_conc_dirichlet(self, c_dirichlet, Isotopologue):
+
+        self.soil_layer.set_conc_iso_liquid(c_dirichlet, Isotopologue=Isotopologue)
+        #self.ci_dirichlet[Isotopologue] = c_dirichlet
+
+
