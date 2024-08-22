@@ -1,6 +1,6 @@
 import cmf
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 import numpy as np
 
 from src import *
@@ -200,22 +200,17 @@ def run(p, P, **kwargs):
     C = P.cells[0]  # current cell cmf_project
     c = p.get_cells()[0]  # current cell of iso_project
 
-    # Simulation Period
-    start = cmf.Time(1, 1, 2020)
-    end = start + timedelta(days=50)  # run cmf for 300 days
-    dt = cmf.h  # time step
-
     # Define solver
     solver = cmf.CVodeBanded(P, 1e-6)
-    solver.t = start
+    start = datetime(2024, 1, 1)
+    end = datetime(2024, 10, 30)
+    timestep = timedelta(hours=1)
 
     solutes = ["2H", "18O"]
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
-    while solver.t < end:
+    for t in solver.run(start, end, timestep):
 
-        print(solver.t)
-
-        solver(dt)
+        print(t)
 
         c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
