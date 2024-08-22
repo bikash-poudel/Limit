@@ -109,3 +109,30 @@ def delta_testcases(Isotopologue, testcase=1):
 
     return delta_ali[Isotopologue], delta_atm[Isotopologue]
 
+
+def test_case_args(testcase=1):
+
+    ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True,
+              'ignorealphaik': True}  # Testcases: Mathieu and Bariac (1996)
+
+    if testcase == 1 or testcase == 2:
+        return ignore
+    elif testcase == 3 or testcase == 4:
+        ignore['ignorealphai'] = False
+        return ignore
+    elif testcase == 5:
+        ignore['ignorealphai'] = False
+        ignore['ignoredli'] = False
+
+        return ignore
+    elif testcase in [6, 7, 8]:
+
+        ignore['ignorealphai'] = False
+        ignore['ignoredli'] = False
+        ignore['ignoredvi'] = False
+        ignore['ignorealphaik'] = False
+
+        return ignore
+
+    else:
+        raise NotImplementedError

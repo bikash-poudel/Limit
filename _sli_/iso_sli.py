@@ -340,9 +340,9 @@ def enrichment_max(Isotopologue, testcase, delta):
     return max(abs(np.array(delta[testcase][Isotopologue]) - delta_soil))
 
 
-#delta = run_testcases([7])
+#delta = run_testcases([1])
 
-# slI = get_sli()
+slI = get_sli()
 # visualize(delta=delta, sli=slI, Isotopologue="2H")
 # visualize(delta=delta, sli=slI, Isotopologue="18O")
 

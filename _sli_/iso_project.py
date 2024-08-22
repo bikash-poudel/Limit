@@ -95,15 +95,11 @@ class iso_project(object):
             delta_c = spsolve(a, b)
 
             # Check for mass balance
-            if not self.mass_balance(delta_c=delta_c, dt=delta_time,
-                                     Isotopologue=Isotopologue, tolerance=error_tol, **kwargs):
+            self.mass_balance(delta_c=delta_c, dt=delta_time, Isotopologue=Isotopologue, tolerance=error_tol, **kwargs)
 
-                raise ValueError("Mass balance exceeded the tolerance")
-            else:
-                return delta_c
+            return delta_c
 
-        except ValueError as err:
-            print(err)
+        except ValueError:
             raise NotImplementedError
 
     def coeff_matrix(self, Isotopologue, delta_time, **kwargs):
@@ -178,14 +174,13 @@ class iso_project(object):
             LHS = self.storage_mass(delta_c=delta_c, dt=dt, Isotopologue=Isotopologue, **kwargs)
             RHS = self.flux_mass(delta_c=delta_c, Isotopologue=Isotopologue, **kwargs)
 
-            print(max(abs(np.array(LHS) - np.array(RHS))))
+            print('error: ', max(abs(np.array(LHS) - np.array(RHS))))
 
-            if max(abs(np.array(LHS) - np.array(RHS))) <= tolerance:
-                return True
-            elif max(abs(np.array(LHS) - np.array(RHS))) > tolerance:
-                return False
+            if tolerance is not None:
+                if max(abs(np.array(LHS) - np.array(RHS))) > tolerance:
+                    raise ValueError("Mass balance exceeded the tolerance")
             else:
-                raise ValueError
+                return None
 
         except ValueError:
             raise NotImplementedError
