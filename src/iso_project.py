@@ -9,9 +9,9 @@ import numpy as np
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 
-import iso_cell
-import iso_fluxes
-import iso_storages
+from . import iso_cell
+from . import iso_fluxes
+from . import iso_storages
 
 
 class iso_project(object):

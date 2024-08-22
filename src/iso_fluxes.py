@@ -6,7 +6,7 @@ Created on 23.05.2024
 # -*- coding: utf-8 -*-
 
 from math import exp, log
-import iso_storages
+from . import iso_storages
 
 
 class flux_connection(object):
@@ -1559,3 +1559,49 @@ class aquifer_connection(boundary_connection):
             flux_i = self.get_flux() * self.soil_layer.get_conc_iso_liquid(Isotopologue=Isotopologue)
 
         return flux_i
+
+
+class neuman_boundary(boundary_connection):
+    """
+    Description
+    ===========
+    Flux of isotopes [kg] between two nodes (atmosphere and usoil layer).
+
+    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+
+    """
+
+    def __init__(self,
+                 atmosphere,
+                 soil_layer,
+                 q_neuman=0.0,
+                 c_neuman={"2H": 1.0, "18O": 1.0}
+                 ):
+
+        """
+        Constructor of evaporation
+
+        """
+        if isinstance(atmosphere, iso_storages.iso_atmosphere) and isinstance(soil_layer, iso_storages.iso_soil_layer):
+
+            boundary_connection.__init__(self, left_node=atmosphere, right_node=soil_layer)
+
+        else:
+            raise NotImplementedError
+
+        self.q_neuman = q_neuman
+        self.ci_neuman = c_neuman
+
+    def calc_flux(self, Isotopologue, **kwargs):
+        return self.q_neuman
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
+
+    def calc_flux_i(self, Isotopologue, **kwargs):
+
+        return self.calc_flux(Isotopologue=Isotopologue) * self.ci_neuman[Isotopologue]
+
+    def set_conc_neuman(self, c_neuman, Isotopologue):
+
+        self.ci_neuman[Isotopologue] = c_neuman

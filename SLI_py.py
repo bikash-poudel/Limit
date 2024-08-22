@@ -1,5 +1,5 @@
 import numpy as np
-from math import exp, log
+from math import exp
 
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
@@ -815,7 +815,7 @@ def solve_iso(sli, dt, ignore):
 
 
 pth = os.getcwd()
-path = os.path.abspath(os.path.join(pth, "..", ".."))
+path = os.path.abspath(os.path.join(pth, "", ".."))
 
 ignorealphai, ignorealphaik, ignoredl, ignoredvi = True, True, True, True
 ignore = [ignorealphai, ignorealphaik, ignoredl, ignoredvi]

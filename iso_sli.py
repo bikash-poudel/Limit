@@ -8,15 +8,12 @@ import os
 import numpy as np
 
 import Sli
-import iso_project
-import iso_storages
-import iso_delta
+from src import *
 
 import matplotlib.pyplot as plt
 
 
 def moisture(sli):
-
     n_timesteps = len(sli.get_scaler())
 
     ql = np.array(sli.qlsig(n_timesteps - 1)) * 1000 * 86400
@@ -43,7 +40,6 @@ def moisture(sli):
 
 
 def visualize(delta, sli, Isotopologue):
-
     depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
     centers = -(depth[:-1] + depth[1:]) / 2.0
     d = centers.tolist()[:10]
@@ -89,18 +85,16 @@ def test_case(testcase=1):
 
 
 def get_sli(testcase=1):
-
     pth = os.getcwd()
-    path = os.path.abspath(os.path.join(pth, "..", ".."))
+    path = os.path.abspath(os.path.join(pth, "", ".."))
 
     # imports all the variable files /variables folder: testcase-1, sig=1
-    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_7'.format(testcase))
+    sli = Sli.SlI(path + '\_sli_\sli_label3\iso_variables_{}'.format(testcase))
 
     return sli
 
 
 def _layers(c, sli, testcase):
-
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     dt = 0  # initial states
@@ -148,7 +142,6 @@ def _layers(c, sli, testcase):
 
 
 def _atm(sli, testcase):
-
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     dt = 0  # initial states
@@ -170,17 +163,17 @@ def _atm(sli, testcase):
     else:
         raise NotImplementedError
 
-    atm = iso_storages.iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
-                                      conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
-                                      T=Tatm, Rh_atmosphere=Rh_atm,
-                                      Pa_atmosphere=patm,
-                                      wind_speed=wind_speed,
-                                      hc=10,  # canopy height [m] (e.g. 40)
-                                      d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
-                                      z0m=0.1 * 10,
-                                      # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
-                                      LAI=1.1,  # leaf area index (e.g. 2.0)
-                                      extku=1.5)
+    atm = iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                         conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
+                         T=Tatm, Rh_atmosphere=Rh_atm,
+                         Pa_atmosphere=patm,
+                         wind_speed=wind_speed,
+                         hc=10,  # canopy height [m] (e.g. 40)
+                         d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
+                         z0m=0.1 * 10,
+                         # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
+                         LAI=1.1,  # leaf area index (e.g. 2.0)
+                         extku=1.5)
     return atm
 
 
@@ -210,7 +203,7 @@ def update_storages(c, sli, dt):
     h0 = sli.pond_height(dt)
     c.update_pond(pond_height=h0)
 
-    #c_aquifer = sli.cali(dt)
+    # c_aquifer = sli.cali(dt)
     c.update_aquifer(c_iso={"2H": 0.0, "18O": 0.0})
 
 
@@ -254,7 +247,7 @@ def update_boundaries(c, sli, dt):
 
 def run_iso(p, sli, **kwargs):
 
-    solutes = ["2H", "18O"]
+    solutes = ["2H"]
     c = p.get_cells()[0]  # get current cell of project
 
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
@@ -268,7 +261,6 @@ def run_iso(p, sli, **kwargs):
         update_storages(c, sli, dt), update_boundaries(c, sli, dt)
 
         for solute in solutes:
-
             delta_t = sli.dt(dt)
             dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-11, **kwargs)
 
@@ -279,13 +271,12 @@ def run_iso(p, sli, **kwargs):
 
 
 def iso_setup(sli, testcase=1, **kwargs):
-
     # Define boundary storages
     atm = _atm(sli, testcase)  # atmosphere
     pd = iso_storages.iso_pond(pond_height=0)  # define pond
     aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # define aquifer as boundary isotope storage
 
-    p = iso_project.iso_project()  # create a project
+    p = iso_project()  # create a project
     p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
 
     c = p.get_cells()[0]  # get current cell
@@ -303,7 +294,6 @@ def iso_setup(sli, testcase=1, **kwargs):
 def run_testcases(test_cases):
     delta = {}
     for Testcase in test_cases:
-
         print('Testcase:', Testcase)
         cases = test_case(testcase=Testcase)
 
@@ -321,7 +311,6 @@ def run_testcases(test_cases):
 
 
 def slope(testcase, delta):
-
     d_2H_ali, d_2H_atm = iso_delta.delta_testcases(Isotopologue="2H", testcase=testcase)
     d_18O_ali, d_18O_atm = iso_delta.delta_testcases(Isotopologue="18O", testcase=testcase)
 
@@ -334,20 +323,17 @@ def slope(testcase, delta):
 
 
 def enrichment_max(Isotopologue, testcase, delta):
-
     delta_soil, delta_vap = iso_delta.delta_testcases(Isotopologue=Isotopologue, testcase=testcase)
 
     return max(abs(np.array(delta[testcase][Isotopologue]) - delta_soil))
 
 
-#delta = run_testcases([1])
+delta = run_testcases([1, 2, 3, 4, 5, 6])
 
-slI = get_sli()
-# visualize(delta=delta, sli=slI, Isotopologue="2H")
-# visualize(delta=delta, sli=slI, Isotopologue="18O")
+slI = get_sli(testcase=1)
+visualize(delta=delta, sli=slI, Isotopologue="2H")
+visualize(delta=delta, sli=slI, Isotopologue="18O")
 
 # ignore = test_case(testcase=1)
 # d = iso_setup(sli=slI, testcase=2, **ignore)
 # moisture(slI)
-
-

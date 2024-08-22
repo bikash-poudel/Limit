@@ -4,10 +4,10 @@ Created on 23.05.2024
 '''
 # -*- coding: utf-8 -*-
 
-import iso_storages
-import iso_fluxes
-import vapor_flux
-import iso_delta
+from . import iso_storages
+from . import iso_fluxes
+from . import vapor_flux
+from . import iso_delta
 
 
 class iso_cell(object):
@@ -42,7 +42,7 @@ class iso_cell(object):
 
         self.__ID = self.__class__.current_ID
         self.__class__.current_ID += 1  # increment the current ID for the next flux node to be created
-        #self.__class__.Dict_of_all_cells[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
+        # self.__class__.Dict_of_all_cells[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
 
         assert (isinstance(location, iso_storages.Point)), "The surface center of a cell must be an instance of " \
                                                            "iso_Storages.Point"
@@ -62,6 +62,8 @@ class iso_cell(object):
         self.__q_runoff = 0.0  # surface runoff
         self.__q_precipitation = 0.0  # precipitation flux
         self.__c_precipitation = {"2H": 1.0, "18O": 1.0}  # iso conc in precipitation
+        self.__q_neuman = 0.0  # neuman flux
+        self.__c_neuman = {"2H": 1.0, "18O": 1.0}  # iso conc in neuman flux
 
         self.__pond = None
 
@@ -85,6 +87,7 @@ class iso_cell(object):
         self.__connection_prec = None
         self.__connection_runoff = None
         self.__connection_to_aquifer = None
+        self.__connection_neuman = None
 
     """Properties"""
 
@@ -128,7 +131,6 @@ class iso_cell(object):
 
         delta_2H = []
         for l in self.__layers:
-
             c = l.get_conc_iso_liquid("2H")
             delta_2H.append(iso_delta.concentration_to_delta(c, "2H"))
 
@@ -149,7 +151,6 @@ class iso_cell(object):
 
         delta_18O = []
         for l in self.__layers:
-
             c = l.get_conc_iso_liquid("18O")
             delta_18O.append(iso_delta.concentration_to_delta(c, "18O"))
 
@@ -252,6 +253,14 @@ class iso_cell(object):
         return self.__c_precipitation
 
     @property
+    def q_neuman(self):
+        return self.__q_neuman
+
+    @property
+    def c_neuman(self):
+        return self.__c_neuman
+
+    @property
     def q_runoff(self):
         """
         @return: Returns the surface runoff flux.
@@ -340,14 +349,32 @@ class iso_cell(object):
         return self.__connection_to_aquifer
 
     @property
+    def connection_neuman(self):
+        """
+        @return: Returns the neuman boundary flux connection related.
+
+        """
+        return self.__connection_neuman
+
+    @property
     def storage_connections(self):
         return self.connections_l_adv + self.connections_v_adv + self.connections_l_diff + self.connections_v_diff
 
     @property
     def boundary_connections(self):
 
-        connections = [self.connection_evap] + [self.connection_prec] \
-                      + [self.connection_runoff] + [self.connection_to_aquifer] + self.connections_transpiration
+        connections = [self.connection_neuman,
+                       self.connection_evap,
+                       self.connection_prec,
+                       self.connection_runoff,
+                       self.connection_to_aquifer]
+
+        if self.connections_transpiration is not None:
+            connections.extend(self.connections_transpiration)
+
+        # Filter out any None values from the connections list
+        connections = [conn for conn in connections if conn is not None]
+
         return connections
 
     def is_upper_boundary(self, storage):
@@ -447,8 +474,8 @@ class iso_cell(object):
             # Assign Atmospheric boundary
 
             ev = iso_fluxes.evaporation(atmosphere=self.atmosphere, top_layer=self.top_layer, q_Evap=self.q_evap,
-                                   T_surface=self.Ts, q_l=self.ql_surface, q_v=self.qv_surface,
-                                   hydrodynamic_dispersivity=hydrodynamic_dispersivity)
+                                        T_surface=self.Ts, q_l=self.ql_surface, q_v=self.qv_surface,
+                                        hydrodynamic_dispersivity=hydrodynamic_dispersivity)
             self.__connection_ev = ev
 
         except ValueError as err:
@@ -465,7 +492,6 @@ class iso_cell(object):
             self.__transpiration = [0.0] * len(self.__layers)
             tr = []
             for layer, ql in zip(self.layers, self.q_transpiration):
-
                 # Assign Atmospheric boundary to each layer
                 tp = iso_fluxes.transpiration(atmosphere=self.atmosphere, soil_layer=layer, ql_transpiration=ql)
 
@@ -502,7 +528,7 @@ class iso_cell(object):
         try:
             # Assign Atmospheric boundary
             pr = iso_fluxes.precipitation(atmosphere=self.atmosphere, top_layer=self.top_layer,
-                                     q_prec=self.q_prec, c_prec=self.c_prec)
+                                          q_prec=self.q_prec, c_prec=self.c_prec)
 
             self.__connection_prec = pr
 
@@ -518,7 +544,7 @@ class iso_cell(object):
        
         # soil_layer connected to the aquifer
         """
-        
+
         self.__aquifer = aquifer
         try:
             # Assign Atmospheric boundary
@@ -536,6 +562,23 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
 
+    def add_neuman_boundary(self, soil_layer):
+        """
+        Assign boundary connection eq: atmosphere etc..
+
+        Returns
+        -------
+        """
+        try:
+            # Assign Atmospheric boundary
+            nm = iso_fluxes.neuman_boundary(atmosphere=self.atmosphere, soil_layer=soil_layer,
+                                            q_neuman=self.q_neuman, c_neuman=self.c_neuman)
+
+            self.__connection_neuman = nm
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
+
     def get_conc_layers(self, Isotopologue):
 
         """"List of Isotope concentration in layers """
@@ -548,7 +591,7 @@ class iso_cell(object):
 
     """"Update storages"""
 
-    def update_atmosphere(self, c_atm={'2H':1.0, '18O':1.0}, T=273.0, Rh=0.2, Pa=10 ** 5, wind_speed=2,
+    def update_atmosphere(self, c_atm={'2H': 1.0, '18O': 1.0}, T=273.0, Rh=0.2, Pa=10 ** 5, wind_speed=2,
                           hc=10, d0=0.67 * 10, z0m=0.1 * 10, LAI=1.1, extku=1.5):
 
         """"
@@ -582,7 +625,6 @@ class iso_cell(object):
                 raise ValueError("Missing matric potential (psi) for all soil layers")
 
             for lr, th, T_soil, r_H, pot in zip(self.__layers, theta, T, rH, psi):
-
                 lr.theta_t0 = lr.theta  # u[date theta for previous time
                 lr.theta = th  # update theta for current time
 
@@ -653,7 +695,6 @@ class iso_cell(object):
             if len(liquid_fluxes[:-1]) == len(self.connections_l_adv):
 
                 for ql, c_l_adv in zip(self.liquid_fluxes, self.connections_l_adv):
-
                     c_l_adv.q_l = ql
             else:
                 raise ValueError("Number of liquid fluxes must be equal to the flux connections")
@@ -688,7 +729,6 @@ class iso_cell(object):
                 q = vapor_flux.vapor_flux()
                 q_v = []
                 for i, c_v_adv in enumerate(self.connections_v_adv):
-
                     qv = q.q_vapor(left_node=c_v_adv.left_node, right_node=c_v_adv.right_node)
                     c_v_adv.q_v = qv
 
@@ -757,8 +797,8 @@ class iso_cell(object):
             self.connection_prec.q_prec = self.q_prec
             self.connection_prec.ci_prec = self.c_prec
 
-            #self.connection_prec.set_conc_prec(c_prec["2H"], "2H")
-            #self.connection_prec.set_conc_prec(c_prec["18O"], "18O")
+            # self.connection_prec.set_conc_prec(c_prec["2H"], "2H")
+            # self.connection_prec.set_conc_prec(c_prec["18O"], "18O")
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
@@ -798,11 +838,29 @@ class iso_cell(object):
             else:
                 ql_aq = ql_layer
 
-            #self.__connection_to_aquifer.ql = ql_aq
+            # self.__connection_to_aquifer.ql = ql_aq
             self.connection_to_aquifer.ql = ql_aq
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
 
+    def update_neuman_boundary(self, q_neuman=0.0, c_neuman={"2H": 1.0, "18O": 1.0}):
 
+        """
+        Updates the neuman flux to current time step
 
+        Returns
+        -------
+        """
+        try:
+            self.__q_neuman = q_neuman
+            self.__c_neuman = c_neuman
+
+            self.connection_neuman.q_neuman = self.q_neuman
+            self.connection_neuman.ci_neuman = self.c_neuman
+
+            # self.connection_prec.set_conc_prec(c_prec["2H"], "2H")
+            # self.connection_prec.set_conc_prec(c_prec["18O"], "18O")
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.") from err

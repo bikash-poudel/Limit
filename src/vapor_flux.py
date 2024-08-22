@@ -1,7 +1,7 @@
 # -*- coding=utf-8 -*-
 from math import exp, sqrt
 
-from iso_fluxes import vapor_diffusion_base_class
+from .iso_fluxes import vapor_diffusion_base_class
 
 
 class vapor_flux(object):
