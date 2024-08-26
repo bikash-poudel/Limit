@@ -126,8 +126,8 @@ def run_BA84(sli, c):
     return c_iso_delta
 
 
-test = 7
-sli = iso_sli.get_sli(testcase=test)
-delta = setup_iso(sli, testcase=test)
+#test = 7
+#sli = iso_sli.get_sli(testcase=test)
+#delta = setup_iso(sli, testcase=test)
 
 

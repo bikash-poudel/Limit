@@ -298,7 +298,6 @@ def run_testcases(test_cases):
         cases = test_case(testcase=Testcase)
 
         delta[Testcase] = {}
-        delta[Testcase] = {}
 
         sli = get_sli(testcase=Testcase)
         d = iso_setup(sli, testcase=Testcase, **cases)

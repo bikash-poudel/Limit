@@ -1053,8 +1053,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
     cv_surface = property(get_cv_surface, None, None, "concentration of water vapour at soil/air interface")
 
-    def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz",
-                          BA83=False, **kwargs):
+    def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz",**kwargs):
 
         """
         Calculates the concentration of minor isotopologue in liquid water at the surface (kg/m3_H2O)
@@ -1064,10 +1063,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        if BA83:  # analytical solution for Barnes and Allison (1983)  saturated case
-            nk = 1
-        else:
-            nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
 
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation=formulation_alpha_i_k, **kwargs)
@@ -1124,6 +1120,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
         nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation="MathieuBariac", **kwargs)
 
@@ -1276,7 +1273,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         except ValueError as err:
             return 0.67
 
-    def nk_sli_solve(self, thetasat_surface, Sl):
+    def nk_sli_solve(self, thetasat_surface, Sl,  BA83=True):
         ## Different formulation in SLI: Appendix : B.7
 
         """
@@ -1288,11 +1285,16 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         @param theta_surface: liquid phase at soil surface (m**3/m**3 )
         @type theta_surface: Float
         """
-
-        nk = ((thetasat_surface * min(Sl, 1) - 0) * 0.5 + (thetasat_surface * (1 - min(Sl, 1)))) \
-             / (thetasat_surface - 0)
+        try:
+            if BA83:
+                nk = 1
+            else:
+                nk = ((thetasat_surface * min(Sl, 1) - 0) * 0.5 + (thetasat_surface * (1 - min(Sl, 1)))) \
+                     / (thetasat_surface - 0)
 
         # nk = 1 if testcase == 7 or 8: sli_solve
+        except:
+            raise NotImplementedError
 
         return nk
 

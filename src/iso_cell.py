@@ -557,7 +557,7 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
 
-    def add_aquifer(self, aquifer, soil_layer, ql_layer=None):
+    def add_aquifer(self, aquifer, soil_layer, ql_aq=None):
         """
        Assign boundary connection to water storage body..
 
@@ -569,6 +569,7 @@ class iso_cell(object):
 
         self.__aquifer = aquifer
         try:
+            """
             # Assign Atmospheric boundary
             if soil_layer is self.bottom_layer:
                 if self.__liquid_fluxes:
@@ -577,7 +578,7 @@ class iso_cell(object):
                     ql_aq = None
             else:
                 ql_aq = ql_layer
-
+            """
             aq = iso_fluxes.aquifer_connection(soil_layer=soil_layer, aquifer=self.aquifer, ql_layer=ql_aq)
             self.__connection_to_aquifer = aq
 
@@ -693,7 +694,7 @@ class iso_cell(object):
 
         self.__pond = self.__layers[0].pond
 
-    def update_aquifer(self, c_iso={"2H": 1.0, "18O": 1.0}):
+    def update_aquifer(self, c_iso={"2H": 1.0, "18O": 1.0}, ql_aq=0.0):
         """
         Updates the iso concentration in aquifer to current time step
 
@@ -703,6 +704,8 @@ class iso_cell(object):
         try:
             self.__aquifer.set_conc_iso_liquid(c_iso["2H"], "2H")
             self.__aquifer.set_conc_iso_liquid(c_iso["18O"], "18O")
+
+            self.connection_to_aquifer.ql = ql_aq
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
