@@ -789,7 +789,6 @@ def solve_iso(sli, dt, ignore):
 
             RHS.append(r)
 
-            
         else:  # last layer            
 
             r =  sli.qlsig(dt)[l] * (cql[l - 1] + dc[l-1] * dcqldca[l-1] + dc[l] * dcqldcb[l-1]) / sig \

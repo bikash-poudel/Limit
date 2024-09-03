@@ -3,11 +3,11 @@ Created on 03.06.2024
 @author: poudel-b
 '''
 # -*- coding: utf-8 -*-
-import os
-import numpy as np
 
 import hydrus
 from src import *
+
+import matplotlib.pyplot as plt
 
 
 def _layers(c, hy, testcase):
@@ -55,8 +55,6 @@ def _layers(c, hy, testcase):
 def _atm(hy, testcase):
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
-    dt = 0  # initial states
-
     # atmospheric variables
     patm = 1  # from SLI_solve
     Tatm = hy.T_s() + Tzero_sli
@@ -74,12 +72,12 @@ def _atm(hy, testcase):
                          T=Tatm, Rh_atmosphere=Rh_atm,
                          Pa_atmosphere=patm,
                          wind_speed=wind_speed,
-                         hc=10,  # canopy height [m] (e.g. 40)
-                         d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
-                         z0m=0.1 * 10,
+                         hc=2,  # 10,  # canopy height [m] (e.g. 40)
+                         d0=0.67 * 2,  # displacement height (e.g. 0.7 * hc)
+                         z0m=0.01,  # 0.01
                          # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
-                         LAI=1.1,  # leaf area index (e.g. 2.0)
-                         extku=1.5)
+                         LAI=0,  # 1.1,  # 1.1  # leaf area index (e.g. 2.0)
+                         extku=0)
     return atm
 
 
@@ -105,13 +103,6 @@ def update_storages(c, hy, dt):
     psi = hy.head(dt)  # sli.matric_pot(dt)
     c.update_layers(theta=theta, T=T_soil, rH=rH, psi=psi)
 
-    # boundary storage
-    h0 = 0  # sli.pond_height(dt)
-    c.update_pond(pond_height=h0)
-
-    # c_aquifer = sli.cali(dt)
-    c.update_aquifer(c_iso={"2H": 0.0, "18O": 0.0})
-
 
 def update_boundaries(c, hy, dt):
     # Update states and fluxes for
@@ -120,53 +111,41 @@ def update_boundaries(c, hy, dt):
     # sli: soil_litter_iso class to import input variables
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
-    # precipitation
-    q_prec = hy.prec()  # sli.qprec(dt)
-    c_prec = 0.0  # sli.cprec(dt)
-    c.update_precipitation(q_prec=q_prec, c_prec={"2H": c_prec, "18O": c_prec})
-
-    # runoff
-    qrunoff = 0.0  # sli.qrunoff(dt)
-    c.update_runoff(q_runoff=qrunoff)
-
     # Surface variables
-    T_surface = hy.T_s() + Tzero_sli  ## TODO: recheck the surface temperature value ?????
-    q_ev = hy.pot_evaporation()  # sli.qevap(dt)
-    ql_surface = hy.q_liquid(dt)[0]
-    qv_surface = 0.0
-    c.update_evaporation(q_ev=q_ev, T_surface=T_surface, ql_surface=ql_surface, qv_surface=qv_surface)
+    T_surface = hy.T_surface(dt) + Tzero_sli  ## TODO: recheck the surface temperature value ?????
+    q_ev = hy.q_evap(dt) # sli.qevap(dt)]
+
+    ql_surface = hy.ql_surface(dt)
+    qv_surface = hy.qv_surface(dt)
+    c.update_evaporation(q_ev=q_ev, T_surface=T_surface, ql_surface=0.0, qv_surface=0.0)
 
     # soil fluxes
-    ql = hy.q_liquid(dt)  # sli.qlsig(dt)[1:]
-    qv = hy.q_vapor(dt)  # sli.qvsig(dt)[1:]
+    ql = np.array(hy.q_liquid(dt)[1:])
+    qv = np.array(hy.q_vapor(dt)[1:])
 
     c.update_liquid_fluxes(liquid_fluxes=ql)
     c.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed internally, else list of qv, len = len(layers)
 
-    # transpiration
-    ql_trans = hy.transpiration(dt)  # sli.qex(dt)
-    c.update_transpiration(q_trans=ql_trans)
-
-    # boundary storage
-    c.update_connection_to_aquifer()
-
 
 def run_iso(p, hy, **kwargs):
-    solutes = ["2H", "18O"]
+    solutes = ["2H", '18O']
     c = p.get_cells()[0]  # get current cell of project
 
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
-    for i, dt in enumerate(hy.time()):  # starting from next time step (n+1)
 
-        print(i, ' ', dt, '  days')
+    for delta_t, dt, in zip(hy.dt, hy.time[1:]):  # starting from next time step (n+1)
+
+        print(dt, '  days')
 
         # c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         # update storage states and boundaries to current time
         update_storages(c, hy, dt), update_boundaries(c, hy, dt)
-        delta_t = 86400
+        print([l.theta for l in c.layers])
+
         for solute in solutes:
+
             dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=None, **kwargs)
 
             c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
@@ -178,8 +157,6 @@ def run_iso(p, hy, **kwargs):
 def iso_setup(hy, testcase=1, **kwargs):
     # Define boundary storages
     atm = _atm(hy, testcase)  # atmosphere
-    pd = iso_storages.iso_pond(pond_height=0)  # define pond
-    aq = iso_storages.iso_aquifer(conc_iso_liquid={"2H": 0.0, "18O": 0.0})  # define aquifer as boundary isotope storage
 
     p = iso_project()  # create a project
     p.new_cell(atmosphere=atm, area=1, x=0, y=0, z=0)  # add new cell
@@ -190,19 +167,15 @@ def iso_setup(hy, testcase=1, **kwargs):
     #####Install connections#######
     c.install_connections()  # install storage connections between the layers
     # boundary connections
-    c.add_evaporation(), c.add_transpiration(), c.add_surface_runoff()
-    c.add_precipitation(), c.add_pond(pd), c.add_aquifer(aq, c.layers[-1])  # aquifer connected to bottom layer
+    c.add_evaporation(),
 
     return run_iso(p, hy, **kwargs)
 
 
-def get_hydrus():
-    pth = os.getcwd()
-    path = os.path.abspath('D:\Hydrus\sli_vapor')
+path_H1D_files = 'D:\Hydrus\sli_vapor'
+path_H1D = 'C:\Program Files (x86)\PC-Progress\Hydrus-1D 4.xx\H1D_CALC.EXE'
+#hydrus.run_hydrus(path_H1D, path_H1D_files)
 
-    return hydrus.hydrus(path)
-
-
+h = hydrus.hydrus(path_H1D_files)
 ignore = iso_delta.test_case_args(testcase=1)
-h = get_hydrus()
 delta = iso_setup(hy=h, testcase=1, **ignore)

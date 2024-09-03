@@ -12,15 +12,14 @@ from src import *
 def visualize(p, delta, Isotopologue='2H'):
 
     depth = [-l.center.z for l in p.get_cells()[0].layers]
-
+    plt.figure(figsize=(7, 10))
     for tests in delta.keys():
         plt.plot(delta[tests][Isotopologue], depth, label='test_{}'.format(tests))
 
-    plt.xlabel('delta_{}'.format(Isotopologue))
-    plt.ylabel('depth [m]')
-    plt.title('initial testcases after 250 days')
-    plt.legend()
-    plt.gca().set_aspect(aspect=100)
+    plt.xlabel(r'$\delta$ {}'.format(Isotopologue))
+    plt.ylabel('depth $[m]$')
+    plt.title('Initial testcases after 250 days')
+    plt.legend(loc='lower right')
     plt.show()
 
 
@@ -78,13 +77,14 @@ def cmf_boundary(P):
     #evap = P.NewNeumannBoundary('evap', cell.layers[0])
     #evap.flux = - 0.866592  # cum day-1
 
-    ETpot = cmf.timeseries.from_scalar(0.2)
+    ETpot = cmf.timeseries.from_scalar(0.55)
+    #for l in cell.layers:
     cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
 
     # Create the boundary condition
     #gw = P.NewOutlet('groundwater', x=0, y=0, z=-1.01)
     q_hot = P.NewNeumannBoundary('q_bot', cell.layers[-1])
-    q_hot.flux = 0.008
+    q_hot.flux = 0.022
 
     # Set the potential
     # gw.potential = 1.01
@@ -111,6 +111,31 @@ def cmf_setup():
 
 
 ###### iso ######
+
+def _atm():
+    # atmospheric variables
+    patm = 1  # from SLI_solve
+    Tatm = 303.17  # sli.Tatm(dt) + Tzero_sli
+    Rh_atm = 0.2  # sli.R_humidity_atm(dt)
+    wind_speed = 0.2  # sli.wind_speed(dt)
+
+    c_iso_2H = iso_delta.delta_to_concentration(67, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
+    c_iso_18O = iso_delta.delta_to_concentration(31.9, '18O')
+
+    atm = iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                         conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
+                         T=Tatm, Rh_atmosphere=Rh_atm,
+                         Pa_atmosphere=patm,
+                         wind_speed=wind_speed,
+                         hc=10,  # canopy height [m] (e.g. 40)
+                         d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
+                         z0m=0.1 * 10,
+                         # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
+                         LAI=1.1,  # leaf area index (e.g. 2.0)
+                         extku=1.5)
+    return atm
+
+
 def _layers(c_iso, C_cmf):
 
     # define iso layers as per cmf layer
@@ -135,30 +160,6 @@ def _layers(c_iso, C_cmf):
         id += 1
         c_iso.add_layer(new_layer)
     return c_iso
-
-
-def _atm():
-    # atmospheric variables
-    patm = 1  # from SLI_solve
-    Tatm = 303.17  # sli.Tatm(dt) + Tzero_sli
-    Rh_atm = 0.2  # sli.R_humidity_atm(dt)
-    wind_speed = 0.2  # sli.wind_speed(dt)
-
-    c_iso_2H = iso_delta.delta_to_concentration(67, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
-    c_iso_18O = iso_delta.delta_to_concentration(31.9, '18O')
-
-    atm = iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
-                         conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
-                         T=Tatm, Rh_atmosphere=Rh_atm,
-                         Pa_atmosphere=patm,
-                         wind_speed=wind_speed,
-                         hc=10,  # canopy height [m] (e.g. 40)
-                         d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
-                         z0m=0.1 * 10,
-                         # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
-                         LAI=1.1,  # leaf area index (e.g. 2.0)
-                         extku=1.5)
-    return atm
 
 
 def update_storages(c_iso, c_cmf):
@@ -191,7 +192,7 @@ def update_boundaries(c_iso, c_cmf, time):
             ql.append(lr.flux_to(lr.lower, time) * f)
 
     c_iso.update_liquid_fluxes(liquid_fluxes=ql)
-    #c_iso.update_vapor_fluxes(vapor_fluxes=qv)
+    # c_iso.update_vapor_fluxes(vapor_fluxes=None)  # self compute vapor flux
 
     # boundary storage
     c_iso_2H = iso_delta.delta_to_concentration(0, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
@@ -275,7 +276,7 @@ def run_testcases(test_cases):
         delta[Testcase] = {}
 
         p_iso, p_cmf = iso_setup()
-        d = run(p_iso, p_cmf, sim_period=50, dt=1, **cases)
+        d = run(p_iso, p_cmf, sim_period=250, dt=1, **cases)
 
         # delta at the end of simulation for each test cases
         delta[Testcase]["2H"] = d["2H"][-1]
@@ -284,7 +285,7 @@ def run_testcases(test_cases):
     return p_iso, delta
 
 
-p_iso, delta = run_testcases(test_cases=[4, 5, 6])
+p_iso, delta = run_testcases(test_cases=[1, 4, 5])
 visualize(p_iso, delta, Isotopologue='2H')
 visualize(p_iso, delta, Isotopologue='18O')
 

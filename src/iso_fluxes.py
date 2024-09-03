@@ -269,7 +269,7 @@ class liquid_diffusion_base_class(object):
                 else:
                     raise NotImplementedError
 
-                dl_i = a_i * 1.10 ** -9 * exp(-(535400 / T ** 2) + (1393.3 / T) + 2.1876)
+                dl_i = a_i * 1 * 10 ** -9 * exp(-(535400 / T ** 2) + (1393.3 / T) + 2.1876)
 
             # SLI: cable_sli_solve.f90::L2381-2390
             elif formulation == "Cuntz":
@@ -1074,7 +1074,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
         dli = self.dl_i(self.top_layer.T, Isotopologue=Isotopologue, theta=1,
                         tortuosity=self.top_layer.tortuosity, **kwargs)
-        dl_eff = self.dl_i_eff(dli, q_l=self.q_l)
+        dl_eff = self.dl_i_eff(dli)
         dl = self.dli_eff_sli(dl_eff, theta_sat=self.top_layer.theta_sat, theta_r=self.top_layer.theta_0,
                               liq_sat=self.top_layer.Sl)
 
@@ -1273,7 +1273,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         except ValueError as err:
             return 0.67
 
-    def nk_sli_solve(self, thetasat_surface, Sl,  BA83=True):
+    def nk_sli_solve(self, thetasat_surface, Sl,  BA83=False):
         ## Different formulation in SLI: Appendix : B.7
 
         """
@@ -1297,6 +1297,27 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
             raise NotImplementedError
 
         return nk
+
+    def rbw(self, ram, rbh):
+        """
+        Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
+
+        Description
+        ===========
+        @param ram: Aerodyamic resistance (from z0m to hc)
+        @type ram: float
+
+        @param rs: Soil laminar boundary layer resistance  (Kustas & Norman AFM 94 (1999) 13-29).
+        @type rs: float
+
+        @return: Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
+
+        Control status: Checked on 15.05.2013 --> Results are the same as for SLI
+        vmet%rbw in sli_main.f90:L361
+        """
+        rbh = ram + rbh  # resistance to water vapour transfer beween surface and lowest atmospheric layer
+
+        return rbh
 
     def rbh(self, wind_speed, extku, LAI):
         """
@@ -1349,27 +1370,6 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         ram = log((hc - d0) / z0m) ** 2 / 0.41 ** 2 / wind_speed
 
         return ram
-
-    def rbw(self, ram, rbh):
-        """
-        Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
-
-        Description
-        ===========
-        @param ram: Aerodyamic resistance (from z0m to hc)
-        @type ram: float
-
-        @param rs: Soil laminar boundary layer resistance  (Kustas & Norman AFM 94 (1999) 13-29).
-        @type rs: float
-
-        @return: Returns the boundary layer resistance. Resistance to water vapour transfer beween surface and lowest atmospheric layer.
-
-        Control status: Checked on 15.05.2013 --> Results are the same as for SLI
-        vmet%rbw in sli_main.f90:L361
-        """
-        rbh = ram + rbh  # resistance to water vapour transfer beween surface and lowest atmospheric layer
-
-        return rbh
 
 
 class transpiration(boundary_connection):

@@ -5,6 +5,7 @@ Created on 03.06.2024
 # -*- coding: utf-8 -*-
 
 import os
+import time
 import numpy as np
 
 import Sli
@@ -30,6 +31,7 @@ def moisture(sli):
     plt.title('moisture at 250-day')
     plt.show()
 
+    plt.figure(figsize=(6, 10))
     plt.plot(ql[:10], d, label='ql')
     plt.plot(qv[:10], d, label='qv')
     plt.xlabel('mm per day')
@@ -42,18 +44,22 @@ def moisture(sli):
 def visualize(delta, sli, Isotopologue):
     depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
     centers = -(depth[:-1] + depth[1:]) / 2.0
-    d = centers.tolist()[:10]
+    d = centers.tolist()
+    plt.figure(figsize=(6, 8))
+
+    if Isotopologue == '2H':
+        i, j = 2, 'H'
+    else:
+        i, j = 18, 'O'
 
     for case in delta.keys():
-        plt.plot(delta[case][Isotopologue][:10], d, label='testcase_{}'.format(case))
+        plt.plot(delta[case][Isotopologue], d, label=r'testcase_{}'.format(case))
         # plt.plot(delta[2][:10], d, label='testcase_2')
 
-    # plt.xlim([-15, 15])
-    plt.xlabel('delta_{}'.format(Isotopologue))
-    plt.ylabel('depth [m]')
-    plt.title('initial testcases after 250 days')
-    plt.legend()
-    plt.gca().set_aspect(aspect=150)
+    plt.xlabel(r'$\delta^{{{}}}{}$ (%)'.format(i, j))
+    plt.ylabel(r'Depth $[m]$')
+    plt.title('Initial testcases after 250 days')
+    plt.legend(loc='lower right')
     plt.show()
 
 
@@ -247,7 +253,7 @@ def update_boundaries(c, sli, dt):
 
 def run_iso(p, sli, **kwargs):
 
-    solutes = ["2H"]
+    solutes = ["2H", "18O"]
     c = p.get_cells()[0]  # get current cell of project
 
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
@@ -256,11 +262,11 @@ def run_iso(p, sli, **kwargs):
 
         c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
-
+        
         # update storage states and boundaries to current time
-        update_storages(c, sli, dt), update_boundaries(c, sli, dt)
-
+        update_storages(c, sli, dt), update_boundaries(c, sli, dt)       
         for solute in solutes:
+            t = sli.time_step(dt) 
             delta_t = sli.dt(dt)
             dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-11, **kwargs)
 
@@ -326,13 +332,13 @@ def enrichment_max(Isotopologue, testcase, delta):
 
     return max(abs(np.array(delta[testcase][Isotopologue]) - delta_soil))
 
+sli = get_sli(testcase=1)
+#delta = run_testcases([8])
+#visualize(delta=delta, sli=slI, Isotopologue="2H")
+#visualize(delta=delta, sli=slI, Isotopologue="18O")
 
-delta = run_testcases([1, 2, 3, 4, 5, 6])
+#ignore = test_case(testcase=1)
+#d = iso_setup(sli=slI, testcase=2, **ignore)
+moisture(sli)
 
-slI = get_sli(testcase=1)
-visualize(delta=delta, sli=slI, Isotopologue="2H")
-visualize(delta=delta, sli=slI, Isotopologue="18O")
 
-# ignore = test_case(testcase=1)
-# d = iso_setup(sli=slI, testcase=2, **ignore)
-# moisture(slI)
