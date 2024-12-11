@@ -45,7 +45,7 @@ def visualize(delta, sli, Isotopologue):
     depth = np.insert(np.cumsum(np.array(sli.dx(0))), 0, 0)
     centers = -(depth[:-1] + depth[1:]) / 2.0
     d = centers.tolist()
-    plt.figure(figsize=(6, 8))
+    plt.figure(figsize=(6,8, ))
 
     if Isotopologue == '2H':
         i, j = 2, 'H'
@@ -53,13 +53,26 @@ def visualize(delta, sli, Isotopologue):
         i, j = 18, 'O'
 
     for case in delta.keys():
-        plt.plot(delta[case][Isotopologue], d, label=r'testcase_{}'.format(case))
+        plt.plot(delta[case][Isotopologue][:10], d[:10], label=r'testcase_{}'.format(case))
         # plt.plot(delta[2][:10], d, label='testcase_2')
 
-    plt.xlabel(r'$\delta^{{{}}}{}$ (%)'.format(i, j))
-    plt.ylabel(r'Depth $[m]$')
-    plt.title('Initial testcases after 250 days')
-    plt.legend(loc='lower right')
+    plt.xlabel(r'$\delta^{{{}}}{}$ ‰ '.format(i, j), fontsize=15)
+    plt.ylabel(r'Depth $[m]$', fontsize=15)
+    plt.tick_params(axis='both', which='major', labelsize=10)
+    #plt.title('Initial testcases after 250 days')
+    legend = plt.legend(loc='lower center')
+    legend.get_frame().set_facecolor('none')  # Set the legend background to be transparent
+    legend.get_frame().set_edgecolor('none')  # Remove the legend border if needed
+
+    # Removing grid lines
+    plt.grid(False)
+
+    # Removing spines (borders around the plot)
+    for spine in plt.gca().spines.values():
+        spine.set_visible(False)
+
+    # Save the plot with a transparent background
+    plt.savefig(r'D:\Isotope transport\Scripts\output\transparent_plot.png', format='png', transparent=True)
     plt.show()
 
 
@@ -332,13 +345,14 @@ def enrichment_max(Isotopologue, testcase, delta):
 
     return max(abs(np.array(delta[testcase][Isotopologue]) - delta_soil))
 
+
 sli = get_sli(testcase=1)
-#delta = run_testcases([8])
-#visualize(delta=delta, sli=slI, Isotopologue="2H")
-#visualize(delta=delta, sli=slI, Isotopologue="18O")
+delta = run_testcases([1])
+#visualize(delta=delta, sli=sli, Isotopologue="2H")
+#visualize(delta=delta, sli=sli, Isotopologue="18O")
 
 #ignore = test_case(testcase=1)
 #d = iso_setup(sli=slI, testcase=2, **ignore)
-moisture(sli)
+#moisture(sli)
 
 

@@ -113,11 +113,11 @@ def update_boundaries(c, hy, dt):
 
     # Surface variables
     T_surface = hy.T_surface(dt) + Tzero_sli  ## TODO: recheck the surface temperature value ?????
-    q_ev = hy.q_evap(dt) # sli.qevap(dt)]
+    q_ev = hy.q_evap(dt)  # sli.qevap(dt)]
 
     ql_surface = hy.ql_surface(dt)
     qv_surface = hy.qv_surface(dt)
-    c.update_evaporation(q_ev=q_ev, T_surface=T_surface, ql_surface=0.0, qv_surface=0.0)
+    c.update_evaporation(q_ev=q_ev, T_surface=T_surface, ql_surface=ql_surface, qv_surface=qv_surface)
 
     # soil fluxes
     ql = np.array(hy.q_liquid(dt)[1:])
@@ -167,7 +167,7 @@ def iso_setup(hy, testcase=1, **kwargs):
     #####Install connections#######
     c.install_connections()  # install storage connections between the layers
     # boundary connections
-    c.add_evaporation(),
+    c.add_evaporation()
 
     return run_iso(p, hy, **kwargs)
 

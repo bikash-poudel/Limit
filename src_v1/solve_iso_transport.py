@@ -12,218 +12,243 @@ from scipy.sparse.linalg import spsolve
 
 # import os
 
-# TODO: diffusion time scale
 
 # Function to run 1D vertical transport
 
 
-def run_1D_model(atmosphere, layers, Q, BC, time, hs_surface, solutes,
-                 ignore_alpha_i=False,
-                 ignore_alpha_i_k=False,
-                 ignore_dl_i=False,
-                 ignore_dv_i=False):
+def run_1D_model(atmosphere, layers, Q, BC, dt, solute,
+                 ignore_alpha_i=True,
+                 ignore_alpha_i_k=True,
+                 ignore_dl_i=True,
+                 ignore_dv_i=True):
 
-    #n_timesteps = time.time_steps
-    ql_up, ql_down, qv_up, qv_down, theta = Q
-    theta_t0 = theta[0]  # theta - current timesteps
-    theta_t1 = theta[1]  # theta - next timesteps
+    ql, qv = Q
     Pa = atmosphere.Pa   # atmospheric pressure  Pa = 1 as per SLI
 
-    C = {}
-    for solute in solutes:
+    A1_ij = []
+    A2_ij = []
+    A3_ij = []
+    Bij = []
 
-        A1_ij = []
-        A2_ij = []
-        A3_ij = []
-        Bij = []
+    l = 0
+    for layer in layers:
 
-        l = 0
-        for layer in layers:
+        layer_up = upper_layer(layers, layer)
+        layer_down = lower_layer(layers, layer)
 
-            T = layer.T
-            porosity = layer.porosity
-            tortuosity = layer.tortuosity
-
-            # TODO: Check in SLI where Dv & Dl comes from??? cable_sli_solve.f90::L2291:L2292
-            vapor_diffusivity = dv(T=T, Pa=Pa) #* time.total_seconds()  # since diffusion is in m2 / s
-            vapor_dv_i = dv_i(T, solute, Pa, ignore_dv_i) #* time.total_seconds()
-            n_D = nD(theta=theta_t0[l], theta_0=layer.theta_0)
-            eff_vapor_diffusivity = dv_i_eff(porosity=porosity, theta=theta_t0[l], nD=n_D, dv=vapor_diffusivity, dv_i=vapor_dv_i, tortuosity=tortuosity)
-
-            liquid_diffusivity = dl_i(T, solute, tortuosity, theta_t0[l], ignore_dl_i) #* time.total_seconds()
-            eff_liquid_diffusivity = dl_i_eff(dl_i=liquid_diffusivity, q_l=ql_up[l])
-
-            alpha = alpha_i(T, solute, ignore_alpha_i)
-            beta = beta_i(alpha_i=alpha, density_h2o_vapour=0.822)    #TODO: check for vapor density
-
-            Dlv_upper = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
-            Dlv_current = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
-            Dlv_lower = D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
-
+        Dv_current, beta_current,  Dlv_current = Dlv(layer, ql[l], Pa, solute,
+                                                     ignore_dv_i, ignore_dl_i, ignore_alpha_i)
+        if layer_up is not None: # Not the Top layer
+            Dv_upper, beta_upper, Dlv_upper = Dlv(layer_up, ql[l], Pa, solute,
+                                                  ignore_dv_i, ignore_dl_i, ignore_alpha_i)
             Dlv_up = (Dlv_upper + Dlv_current) / 2
+
+            dz_up = (layer_up.thickness + layer.thickness) / 2
+            Qlv_up = ql[l-1] + qv[l-1] * (beta_upper + beta_current) / 2 \
+                     - (Dv_upper + Dv_current) / 2 * (beta_current - beta_upper) / dz_up
+
+        if layer_down is not None:  # Not the Bot layer
+            Dv_lower, beta_lower, Dlv_lower = Dlv(layer_down, ql[l], Pa, solute,
+                                                  ignore_dv_i, ignore_dl_i, ignore_alpha_i)
             Dlv_down = (Dlv_current + Dlv_lower) / 2
 
-            Dv_upper = eff_vapor_diffusivity
-            Dv_current = eff_vapor_diffusivity
-            Dv_lower = eff_vapor_diffusivity
+            dz_down = (layer.thickness + layer_down.thickness)
+            Qlv_down = ql[l] + qv[l] * (beta_lower + beta_current) / 2 \
+                       - (Dv_lower + Dv_current) / 2 * (beta_lower - beta_current) / dz_down
 
-            current_beta_upper = beta
-            current_beta = beta
-            current_beta_lower = beta
+        theta_eff_t0 = layer.theta_t0 + (layer.theta_sat - layer.theta_t0) * beta_current
+        theta_eff_t1 = layer.theta + (layer.theta_sat - layer.theta) * beta_current
 
-            dz = layer.thickness
+        delta_z = layer.thickness  # thickness
+        delta_t = dt
 
-            Qlv_up = ql_up[l] + qv_up[l] * (current_beta_upper + current_beta) / 2 \
-                     - (Dv_upper + Dv_current) / 2 * (current_beta - current_beta_upper) / dz
+        dzdt = delta_z / delta_t
+        current_co = layer.get_conc_iso_liquid(solute)
 
-            Qlv_down = ql_down[l] + qv_down[l] * (current_beta_lower + current_beta) / 2 \
-                       - (Dv_lower + Dv_current) / 2 * (current_beta_lower - current_beta) / dz
+        if layer_up is None:  # upper boundary
+            if BC.upper_boundary_type == 'dirichlet':
 
-            theta_eff_t0 = theta_t0[l] + (layer.porosity - theta_t0[l]) * current_beta
-            theta_eff_t1 = theta_t1[l] + (layer.porosity - theta_t1[l]) * current_beta
-
-            delta_z = layer.thickness
-            delta_t = time.dt * time.total_seconds()
-
-            dzdt = delta_z / delta_t
-            current_co = layer.c_solutes[solute]
-
-            if layer == layers[0]:  # upper boundary
-                if BC.upper_boundary_type == 'dirichlet':
-
-                    A2 = 1
-                    A2_ij.append(A2)
-
-                    A3 = 0
-                    A3_ij.append(A3)
-
-                    B = BC.upper_boundary_content  # conc for n days
-                    Bij.append(B)
-
-                if BC.upper_boundary_type == 'neuman':
-
-                    A2 = dzdt * theta_eff_t1 + Dlv_down / dz + Qlv_down / 2
-                    A2_ij.append(A2)
-
-                    A3 = - Dlv_down / dz + Qlv_down / 2
-                    A3_ij.append(A3)
-
-                    B = dzdt * theta_eff_t0 * current_co + BC.upper_boundary_content   # qi:neuman isotope flux
-                    Bij.append(B)
-
-                if BC.upper_boundary_type == 'atmosphere':
-
-                    A2 = dzdt * theta_eff_t1 + Dlv_down / dz + Qlv_down / 2
-                    A2_ij.append(A2)
-
-                    A3 = - Dlv_down / dz + Qlv_down / 2
-                    A3_ij.append(A3)
-
-                    nk = nK_MathieuBariac(theta_surface=theta_t0[0],
-                                          theta_surface_sat=layer.theta_sat,
-                                          theta_surface_0=layer.theta_0)
-
-                    alpha_ik = alpha_i_k(dv=vapor_diffusivity,
-                                         dv_i=vapor_dv_i,
-                                         nK_MathieuBariac=nk,
-                                         formulation="MathieuBariac",
-                                         ignore_alpha_i_k=ignore_alpha_i_k)
-
-                    Rl_soil = concentration_to_ratio(c_solutes_i=current_co,
-                                                     solute_i=solute)
-                    Rv_atm = concentration_to_ratio(c_solutes_i=atmosphere.c_atmosphere[solute],
-                                                    solute_i=solute)
-                    #hs = 0.2  # soil surface relative humidity (-)   TODO:  check the values
-                    rh_normalized = rh_atm_normalized(ha=atmosphere.Rh_atmosphere,
-                                                      T_atmosphere=atmosphere.T_atmosphere,
-                                                      T_soil=layer.T)
-
-                    #rH_soil = theta_t0[0] / layer.porosity  # wetnes(humidity)s of the layer
-                    rH_soil = hs_surface
-
-                    qi_evap = q_i_Evaporation_Braud_old(E_pot=BC.upper_boundary_content,
-                                                       alpha_i=alpha,
-                                                       alpha_i_k=alpha_ik,
-                                                       Rl_i_Soil=Rl_soil,
-                                                       Rv_i_Atmosphere=Rv_atm,
-                                                       rH_Soil=rH_soil,
-                                                       rH_normalized_Atmosphere=rh_normalized,
-                                                       solute_i=solute)
-                    """
-                    qi_evap_SLI = q_i_Evaporation(qev=-BC.upper_boundary_content,
-                                                  solute=solute,
-                                                  cv_a=atmosphere.cv_a(Rh=atmosphere.Rh_atmosphere,
-                                                                       T=atmosphere.T_atmosphere),
-                                                  c_atmosphere=atmosphere.c_atmosphere,
-                                                  c_soil=layer.c_solutes,
-                                                  ram=ram(wind_speed=atmosphere.wind_speed,
-                                                                          hc=40,
-                                                                          d0=0.7*40,
-                                                                          z0m=0.1*40),
-                                                  rs=rs(wind_speed=atmosphere.wind_speed,
-                                                                        extku=0.0,
-                                                                        LAI=0.5),
-                                                  alpha_i=alpha,
-                                                  alpha_i_k=alpha_ik)
-                    """
-
-                    B = dzdt * theta_eff_t0 * current_co + qi_evap
-                    Bij.append(B)
-
-            if layer != layers[0] and layer != layers[-1]:  # intermediate layers
-
-                A1 = - Dlv_up / dz - Qlv_up / 2
-                A1_ij.append(A1)
-
-                A2 = dzdt * theta_eff_t1 + Dlv_down / dz + Qlv_down / 2 \
-                     + Dlv_up / dz - Qlv_up / 2
+                A2 = 1
                 A2_ij.append(A2)
 
-                A3 = - Dlv_down / dz + Qlv_down / 2
+                A3 = 0
                 A3_ij.append(A3)
 
-                B = dzdt * theta_eff_t0 * current_co
+                B = BC.upper_boundary_content  # conc for n days
                 Bij.append(B)
 
-            if layer == layers[-1]:  # lower boundary
+            elif BC.upper_boundary_type == 'neuman':
 
-                if BC.lower_boundary_type == 'dirichlet':
+                A2 = dzdt * theta_eff_t1 + Dlv_down / dz_down + Qlv_down / 2
+                A2_ij.append(A2)
 
-                    A1 = 0
-                    A1_ij.append(A1)
+                A3 = - Dlv_down / dz_down + Qlv_down / 2
+                A3_ij.append(A3)
 
-                    A2 = 1
-                    A2_ij.append(A2)
+                B = dzdt * theta_eff_t0 * current_co + BC.upper_boundary_content   # qi:neuman isotope flux
+                Bij.append(B)
 
-                    B = BC.lower_boundary_content
-                    Bij.append(B)
-                if BC.lower_boundary_type == 'neuman':
+            elif BC.upper_boundary_type == 'atmosphere':
 
-                    A1 = - Dlv_up / dz - Qlv_up / 2
-                    A1_ij.append(A1)
+                A2 = dzdt * theta_eff_t1 + Dlv_down / dz_down + Qlv_down / 2
+                A2_ij.append(A2)
 
-                    A2 = 2 * dzdt * theta_eff_t1 + Dlv_up / dz - Qlv_up / 2
-                    A2_ij.append(A2)
+                A3 = - Dlv_down / dz_down + Qlv_down / 2
+                A3_ij.append(A3)
 
-                    B = 2 * dzdt * theta_eff_t0 * current_co - BC.lower_boundary_content  # qi = neuman flux isotope
-                    Bij.append(B)
 
-            l += 1
+                nk = nK_MathieuBariac(theta_surface=layer.theta_t0,
+                                      theta_surface_sat=layer.theta_sat,
+                                      theta_surface_0=layer.theta_0)
+                vapor_diffusivity, vapor_dv_i = dv(T=layer.T, Pa=Pa), dv_i(layer.T, solute, Pa, ignore_dv_i)
 
-        n_layers = len(layers)
-        A = lil_matrix((n_layers, n_layers))
-        A.setdiag(A1_ij, k=-1)     # TODO: Check for the diagonal-1 matrix starts from - A[1,0]
-        A.setdiag(A2_ij, k=0)
-        A.setdiag(A3_ij, k=1)
+                alpha_ik = alpha_i_k(dv=vapor_diffusivity,
+                                     dv_i=vapor_dv_i,
+                                     nK_MathieuBariac=nk,
+                                     formulation="MathieuBariac",
+                                     ignore_alpha_i_k=ignore_alpha_i_k)
 
-        B = np.asarray(Bij)
-        A = A.tocsr()
-        Ciso = spsolve(A, B).tolist()
-        #C = np.array(Ci_layers).transpose()
+                Rl_soil = concentration_to_ratio(c_solutes_i=current_co,
+                                                 solute_i=solute)
+                Rv_atm = concentration_to_ratio(c_solutes_i=atmosphere.get_conc_iso_vapor(solute),
+                                                solute_i=solute)
+                #hs = 0.2  # soil surface relative humidity (-)   TODO:  check the values
+                rh_normalized = rh_atm_normalized(ha=atmosphere.Rh,
+                                                  T_atmosphere=atmosphere.T,
+                                                  T_soil=layer.T)
 
-        C[solute] = Ciso
+                rH_soil = layer.relative_humidity(layer.psi, layer.T)  # layer.theta_t0 / layer.theta_sat  # wetnes(humidity)s of the layer
+                # rH_soil = hs_surface
 
-    return C
+                alpha = alpha_i(layer.T, solute, ignore_alpha_i)
+                qi_evap = q_i_Evaporation_Braud_old(E_pot=BC.upper_boundary_content,
+                                                   alpha_i=alpha,
+                                                   alpha_i_k=alpha_ik,
+                                                   Rl_i_Soil=Rl_soil,
+                                                   Rv_i_Atmosphere=Rv_atm,
+                                                   rH_Soil=rH_soil,
+                                                   rH_normalized_Atmosphere=rh_normalized,
+                                                   solute_i=solute)
+
+                """
+                qi_evap_SLI = q_i_Evaporation(qev=-BC.upper_boundary_content,
+                                              solute=solute,
+                                              cv_a=atmosphere.cv_a(Rh=atmosphere.Rh_atmosphere,
+                                                                   T=atmosphere.T_atmosphere),
+                                              c_atmosphere=atmosphere.c_atmosphere,
+                                              c_soil=layer.c_solutes,
+                                              ram=ram(wind_speed=atmosphere.wind_speed,
+                                                                      hc=40,
+                                                                      d0=0.7*40,
+                                                                      z0m=0.1*40),
+                                              rs=rs(wind_speed=atmosphere.wind_speed,
+                                                                    extku=0.0,
+                                                                    LAI=0.5),
+                                              alpha_i=alpha,
+                                              alpha_i_k=alpha_ik)
+                """
+
+                B = dzdt * theta_eff_t0 * current_co + qi_evap
+
+                Bij.append(B)
+
+            else:
+                raise ValueError("Improper boundary")
+
+        if layer_up and layer_down:  # intermediate layers
+
+            A1 = - Dlv_up / dz_up - Qlv_up / 2
+            A1_ij.append(A1)
+
+            A2 = dzdt * theta_eff_t1 + Dlv_down / dz_down + Qlv_down / 2 \
+                 + Dlv_up / dz_up - Qlv_up / 2
+            A2_ij.append(A2)
+
+            A3 = - Dlv_down / dz_down + Qlv_down / 2
+            A3_ij.append(A3)
+
+            B = dzdt * theta_eff_t0 * current_co
+            Bij.append(B)
+
+        if layer_down is None:  # lower boundary
+
+            if BC.lower_boundary_type == 'dirichlet':
+
+                A1 = 0
+                A1_ij.append(A1)
+
+                A2 = 1
+                A2_ij.append(A2)
+
+                B = BC.lower_boundary_content
+                Bij.append(B)
+            if BC.lower_boundary_type == 'neuman':
+
+                A1 = - Dlv_up / dz_up - Qlv_up / 2
+                A1_ij.append(A1)
+
+                A2 = 2 * dzdt * theta_eff_t1 + Dlv_up / dz_up - Qlv_up / 2
+                A2_ij.append(A2)
+
+                B = 2 * dzdt * theta_eff_t0 * current_co - BC.lower_boundary_content  # qi = neuman flux isotope
+                Bij.append(B)
+
+        l += 1
+
+    n_layers = len(layers)
+    A = lil_matrix((n_layers, n_layers))
+    A.setdiag(A1_ij, k=-1)     # TODO: Check for the diagonal-1 matrix starts from - A[1,0]
+    A.setdiag(A2_ij, k=0)
+    A.setdiag(A3_ij, k=1)
+
+    B = np.asarray(Bij)
+    A = A.tocsr()
+    Ciso = spsolve(A, B).tolist()
+    #C = np.array(Ci_layers).transpose()
+
+    return Ciso
+
+
+def Dlv(layer, ql, Pa, solute, ignore_dv_i, ignore_dl_i, ignore_alpha_i):
+
+    T, porosity, tortuosity = layer.T, layer.theta_sat, layer.tortuosity
+
+    # TODO: Check in SLI where Dv & Dl comes from??? cable_sli_solve.f90::L2291:L2292
+    vapor_diffusivity = dv(T=T, Pa=Pa)
+    vapor_dv_i = dv_i(T, solute, Pa, ignore_dv_i)
+    n_D = nD(theta=layer.theta_t0, theta_0=layer.theta_t0)
+    eff_vapor_diffusivity = dv_i_eff(porosity=porosity, theta=layer.theta_t0, nD=n_D, dv=vapor_diffusivity,
+                                     dv_i=vapor_dv_i, tortuosity=tortuosity)
+
+    liquid_diffusivity = dl_i(T, solute, tortuosity, layer.theta_t0, ignore_dl_i)
+    eff_liquid_diffusivity = dl_i_eff(dl_i=liquid_diffusivity, q_l=ql)
+
+    alpha = alpha_i(T, solute, ignore_alpha_i)
+    beta = beta_i(alpha_i=alpha, density_h2o_vapour=0.822)  # TODO: check for vapor density
+
+    return eff_vapor_diffusivity, beta, D_lv_eff(eff_liquid_diffusivity, eff_vapor_diffusivity, beta)
+
+
+def upper_layer(layers, layer):
+    """
+    @return: Returns the upper iso_layer of layers belonging to this cell.
+    """
+    index_layer = layers.index(layer)
+    if index_layer > 0:
+        return layers[index_layer - 1]
+    else:
+        return None
+
+
+def lower_layer(layers, layer):
+    """
+    @return: Returns the lower iso_layer of layers belonging to this cell.
+    """
+    index_layer = layers.index(layer)
+    if index_layer < len(layers) - 1:
+        return layers[index_layer + 1]
+    else:
+        return None
 
 
 def dv_i_eff(porosity, theta, nD, dv, dv_i, tortuosity):
@@ -1045,7 +1070,6 @@ def p_sat(T):
         p_sat = -4.86 + 0.855 * p_sat + 0.000244 * p_sat ** 2  # ps for ice
 
     return p_sat
-
 
 
 

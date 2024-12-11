@@ -1,3 +1,4 @@
+import cProfile
 
 import cmf
 
@@ -83,8 +84,8 @@ def cmf_boundary(P):
 
     # Create the boundary condition
     #gw = P.NewOutlet('groundwater', x=0, y=0, z=-1.01)
-    q_hot = P.NewNeumannBoundary('q_bot', cell.layers[-1])
-    q_hot.flux = 0.022
+    q_bot = P.NewNeumannBoundary('q_bot', cell.layers[-1])
+    q_bot.flux = 0.022
 
     # Set the potential
     # gw.potential = 1.01
@@ -192,16 +193,23 @@ def update_boundaries(c_iso, c_cmf, time):
             ql.append(lr.flux_to(lr.lower, time) * f)
 
     c_iso.update_liquid_fluxes(liquid_fluxes=ql)
-    # c_iso.update_vapor_fluxes(vapor_fluxes=None)  # self compute vapor flux
+    #c_iso.update_vapor_fluxes(vapor_fluxes=None)  #vapor_fluxes=None: self compute vapor flux
 
     # boundary storage
-    c_iso_2H = iso_delta.delta_to_concentration(0, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
-    c_iso_18O = iso_delta.delta_to_concentration(0, '18O')
 
     f = 1 / c_cmf.area / 86400  # m3 day-1 to ms-1
-    q_evap = c_cmf.layers[0].fluxes(time)[-1][0] * f  # c_cmf.evporation.fluxes(time)[0][0] * f  # c_cmf.layers[0].fluxes(time)[-1][0] * f
+    q_evap = c_cmf.evaporation.fluxes(time)[0][0] * f  # c_cmf.layers[0].fluxes(time)[-1][0] * f
 
-    c_iso.update_evaporation(q_ev=q_evap, T_surface=303.17, ql_surface=0.0)
+    c_iso_2H = iso_delta.delta_to_concentration(67, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
+    c_iso_18O = iso_delta.delta_to_concentration(31.9, '18O')
+
+    c_iso.update_neuman_boundary(q_neuman=q_evap, c_neuman={"2H": c_iso_2H, "18O": c_iso_18O})
+
+    #c_iso.update_evaporation(q_ev=q_evap)
+
+    c_iso_2H = iso_delta.delta_to_concentration(0, '2H')
+    c_iso_18O = iso_delta.delta_to_concentration(0, '18O')
+
     # c_iso.update_dirichlet_boundary(c_dirichlet={"2H": c_iso_2H, "18O": c_iso_18O})
 
 
@@ -220,9 +228,10 @@ def iso_setup():
     _layers(c, C)  # add cmf layers to the current iso_cell
 
     #####Install connections#######
-    c.install_connections(vapor_advection=False, vapor_diffusion=False)  # install storage connections between the layers
+    c.install_connections(vapor_diffusion=False, vapor_advection=False)  # install storage connections between the layers
 
-    c.add_evaporation()
+    #c.add_evaporation()
+    c.add_neuman_boundary(soil_layer=c.layers[0])
     # c.add_dirichlet_boundary(soil_layer=c.layers[-1])
 
     return p, P
@@ -285,7 +294,7 @@ def run_testcases(test_cases):
     return p_iso, delta
 
 
-p_iso, delta = run_testcases(test_cases=[1, 4, 5])
+p_iso, delta = run_testcases(test_cases=[6])
 visualize(p_iso, delta, Isotopologue='2H')
 visualize(p_iso, delta, Isotopologue='18O')
 

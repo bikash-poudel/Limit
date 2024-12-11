@@ -157,6 +157,7 @@ class flux_node(object):
         Control status: Checked on 16.05.2013 --> Results are the same as for SLI
         """
         ignore_alpha_i = kwargs.get('ignorealphai', False)
+
         try:
             # SLI: cable_sli_solve.f90::L2275 - L2305
             if T is None:
@@ -695,7 +696,6 @@ class iso_storage(flux_node):
         Control status: Checked on 16.05.2013 --> Results are the same as for SLI
         """
         ignore_alpha_i = kwargs.get('ignorealphai', False)
-
         try:
             # SLI: cable_sli_solve.f90::L2275 - L2305
             if T is None:
@@ -704,7 +704,10 @@ class iso_storage(flux_node):
             if dT is None:
                 dT = self.dT
 
-            if not ignore_alpha_i:
+            if ignore_alpha_i:
+                d_alpha = 0.0
+
+            elif not ignore_alpha_i:
                 if "2H" == Isotopologue:
                     d_alpha = (2 * 24844 / T ** 3 + (-76.248) / T ** 2) / exp(
                         24844 / T ** 2 + (-76.248) / T + 0.052612)
@@ -713,9 +716,8 @@ class iso_storage(flux_node):
                         1137 / T ** 2 + (-0.4156) / T - 0.0020667)
                 else:
                     raise NotImplementedError
-
             else:
-                d_alpha = 0
+                raise ValueError
 
             delta_beta = d_alpha * dT
 
