@@ -165,6 +165,7 @@ def run_iso(p, soil, **kwargs):
     time_steps = len(soil.get_head())
     for dt in range(time_steps-1):
         print(dt / 24, ' days')
+        print(c.conc_2H_delta[0])
 
         c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
@@ -173,7 +174,7 @@ def run_iso(p, soil, **kwargs):
         update_storages(c, soil, dt), update_boundaries(c, soil, dt)
         for solute in solutes:
 
-            delta_t = 60
+            delta_t = 60*60
             dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=None, **kwargs)
 
             c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
