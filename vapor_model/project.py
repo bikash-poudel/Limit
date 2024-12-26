@@ -4,15 +4,13 @@ Created on 11.12.2024
 '''
 # -*- coding: utf-8 -*-
 
-import fluxes
-import storage
-from cell import cell
+from . import storage
+from . import cell
+from . import fluxes
 
 import numpy as np
 from scipy.sparse import lil_matrix, csr_matrix
 from scipy.sparse.linalg import spsolve
-
-from math import sin, pi
 
 
 class project(object):
@@ -42,7 +40,7 @@ class project(object):
         atmosphere
         """
         # i_point = storages.Point(x, y, z)
-        c = cell(atmosphere=atmosphere)
+        c = cell.cell(atmosphere=atmosphere)
         self.__cells.append(c)
 
     def run(self, dt=1, dt_max=60, epsilon=1e-4):
@@ -215,15 +213,15 @@ class project(object):
                     index_r = storages.index(c.right_node)  # index of right storage node
 
                     r = self.r(c, dt)
-                    hy_cond_pot, hy_cond_tmp = c.hy_conduct_potential() * r, c.hy_conduct_temp() * r
+                    hy_cond_pot, q_tmp_water = c.hy_conduct_potential() * r, c.q_tmp_water() * r
 
                     mat_A[index_l, index_r] -= hy_cond_pot
                     mat_A[index_r, index_l] -= hy_cond_pot
                     mat_A[index_l, index_l] += hy_cond_pot
                     mat_A[index_r, index_r] += hy_cond_pot
 
-                    mat_B[index_l] += hy_cond_tmp
-                    mat_B[index_r] -= hy_cond_tmp
+                    mat_B[index_l] += q_tmp_water
+                    mat_B[index_r] -= q_tmp_water
 
                 else:
                     raise NotImplementedError

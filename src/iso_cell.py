@@ -485,7 +485,7 @@ class iso_cell(object):
             print(err)
             raise NotImplementedError
 
-    def add_evaporation(self, hydrodynamic_dispersivity=0.0):
+    def add_evaporation(self, layer=None, hydrodynamic_dispersivity=0.0):
         """
         Assign boundary connection eq: atmosphere etc..
 
@@ -494,8 +494,10 @@ class iso_cell(object):
         """
         try:
             # Assign Atmospheric boundary
+            if layer is None:
+                layer = self.top_layer
 
-            ev = iso_fluxes.evaporation(atmosphere=self.atmosphere, top_layer=self.top_layer, q_Evap=self.q_evap,
+            ev = iso_fluxes.evaporation(atmosphere=self.atmosphere, top_layer=layer, q_Evap=self.q_evap,
                                         T_surface=self.Ts, q_l=self.ql_surface, q_v=self.qv_surface,
                                         hydrodynamic_dispersivity=hydrodynamic_dispersivity)
             self.__connection_ev = ev

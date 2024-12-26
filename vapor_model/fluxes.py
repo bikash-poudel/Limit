@@ -25,9 +25,18 @@ class water_flux(flux_connection):
 
         return abs(sqrt(self.left_node.kml * self.right_node.kml))
 
+    def q_pot_water(self):
+        return self.hy_conduct_potential() * (self.right_node.head - self.left_node.head)
+
     def hy_conduct_temp(self):
 
-        return abs(sqrt(self.left_node.dtl * self.right_node.dtl)) * (self.left_node.T - self.right_node.T)
+        return abs(sqrt(self.left_node.dtl * self.right_node.dtl))
+
+    def q_tmp_water(self):
+        return self.hy_conduct_temp() * (self.right_node.T - self.left_node.T)
+
+    def q_water(self):
+        return self.q_pot_water() + self.q_tmp_water()
 
 
 class heat_flux(flux_connection):

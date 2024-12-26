@@ -4,8 +4,8 @@ Created on 11.12.2024
 '''
 # -*- coding: utf-8 -*-
 
-import storage
-import fluxes
+from . import storage
+from . import fluxes
 
 
 class cell(object):
