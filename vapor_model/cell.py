@@ -25,6 +25,17 @@ class cell(object):
         self.__Tright = None
 
         self.__qevap = None
+        self.__ql = None
+        self.__qv = None
+
+    @property
+    def atmosphere(self):
+        return self.__atmosphere
+
+    @property
+    def layers(self):
+
+        return self.__layers
 
     @property
     def hleft(self):
@@ -67,13 +78,20 @@ class cell(object):
         self.__qevap = q
 
     @property
-    def atmosphere(self):
-        return self.__atmosphere
+    def liquid_fluxes(self):
+        return self.__ql
+
+    @liquid_fluxes.setter
+    def liquid_fluxes(self, q):
+        self.__ql = q
 
     @property
-    def layers(self):
+    def vapor_fluxes(self):
+        return self.__qv
 
-        return self.__layers
+    @vapor_fluxes.setter
+    def vapor_fluxes(self, q):
+        self.__qv = q
 
     @property
     def water_connections(self):
@@ -183,8 +201,8 @@ class cell(object):
     def update_boundary_head(self):
 
         l_left, l_right = self.layers[0], self.layers[-1]
-        l_left.head = self.hleft
-        # l_right.head = Hright
+        #l_left.head = self.hleft
+        l_right.head = self.hright
 
     def update_boundary_T(self, Tleft=25, Tright=25):
 
@@ -192,7 +210,8 @@ class cell(object):
         l_left.T = self.Tleft
         l_right.T = self.Tright
 
-    def update_evaporation(self):
+    def update_evaporation(self, qevap):
 
+        self.q_evap = qevap
         self.__connection_evap.q_evap = self.q_evap
 

@@ -5,7 +5,7 @@ Created on 11.12.2024
 
 # -*- coding: utf-8 -*-
 
-from math import exp, sqrt
+from math import log, exp, sqrt
 
 
 class flux_node(object):
@@ -90,7 +90,7 @@ class atmosphere(flux_node):
 
         flux_node.__init__(self)
         self.T = T
-        self.Rh = Rh_atmosphere  # porosity of the soil m3/m3
+        self.Rh = Rh_atmosphere  #
         self.Pa = Pa_atmosphere  # Atmospheric preassure (Pa)
         self.R_net = R_net  # Net radiation absorbed
         self.wind_speed = wind_speed  # wind speed at top of canopy in m/s
@@ -121,12 +121,13 @@ class soil_layer(flux_node):
                  theta_sat=0.547,
                  tortuosity=0.67,
                  rH=0,
-                 head=1.0,
+                 head=1.0, # cm
                  T=25,
                  T0=25,
                  K_s=3.8e-3,  # cm /s
-                 phi_e=-13.0,  # cm
-                 b=6.53,
+                 phi=-19.3,  # cm
+                 lam=0.22,  # shape coeffecient Brooks-Corey (1964)
+                 eta=9.14,  # braut test cases
                  clay=0.249,
                  sand=0.022,
                  silt=0.729,
@@ -146,8 +147,10 @@ class soil_layer(flux_node):
 
         # Soil Properties
         self.Ks = K_s
-        self.phi = phi_e
-        self.b = b
+        self.phi = phi
+        self.lamda = lam
+        self.eta = eta
+
         self.clay = clay
         self.sand = sand
         self.silt = silt
@@ -174,10 +177,6 @@ class soil_layer(flux_node):
     def theta(self):
         return self.calc_theta(self.head)
 
-    # @theta.setter
-    #def theta(self, theta):
-     #   self.__theta = theta
-
     @property
     def T(self):
         """in  Celcius"""
@@ -188,11 +187,69 @@ class soil_layer(flux_node):
         self.__T = T
 
     @property
+    def S(self):
+
+        return self.theta / self.theta_sat
+
+    @property
+    def phi_e(self):
+
+        return self.Ks * self.phi / (1 - self.lamda * self.eta)
+
+    @property
+    def v3(self):
+        return exp(-log(self.S) / self.lamda)
+
+    @property
+    def v4(self):
+        return exp(self.eta * log(self.S))
+
+    @property
+    def ph_i(self):
+
+        if self.S >= 1:
+            return self.phi_e
+        elif self.S < 1:
+            return self.phi_e * self.v3 * self.v4
+        else:
+            return NotImplementedError
+
+    @property
+    def phi_S(self):
+
+        if self.S >= 1:
+            return (self.eta - 1 / self.lamda) * self.phi_e
+        elif self.S < 1:
+            return (self.eta - 1 / self.lamda) * self.ph_i / self.S
+        else:
+            return NotImplementedError
+
+    @property
+    def K(self):
+
+        if self.S >= 1:
+            return self.Ks
+        elif self.S < 1:
+            return self.Ks * self.v4
+        else:
+            return NotImplementedError
+
+    @property
+    def KS(self):
+
+        if self.S >= 1:
+            return self.eta * self.Ks
+        elif self.S < 1:
+            return self.eta * self.Ks / self.S
+        else:
+            return NotImplementedError
+
+    @property
     def kT0(self):
 
         """Calculate the hydraulic conductivity at T_0"""
 
-        k = self.Ks * ((self.theta / self.theta_sat) ** (2 * self.b + 3))
+        k = self.Ks * ((self.theta / self.theta_sat) ** (2 / self.lamda + 3))
 
         return k
 
@@ -230,10 +287,10 @@ class soil_layer(flux_node):
         """The water capicity [cm-1], potention to Capa
         refer to Nassar and Horton 1997 and Heitman 2008 """
 
-        h = min(self.head, -13.0)  # cm
+        h = min(self.head, self.phi)  # cm
         h = max(h, -3.0e10)  # cm
 
-        c = - self.theta_sat * abs((h / self.phi) ** (-1 / self.b - 1)) / self.b / self.phi
+        c = - self.theta_sat * abs((h / self.phi) ** (-self.lamda - 1)) * self.lamda / self.phi
 
         return c
 
@@ -339,7 +396,7 @@ class soil_layer(flux_node):
         theta_a = self.theta_sat - self.theta
         Tt = self.T + 273.15
 
-        rho_vs = 1.0e-6 * exp(19.84 - 4975.9 / Tt) # g m-3
+        rho_vs = 1.0e-6 * exp(19.84 - 4975.9 / Tt) # g cm-3
         HR = exp(2.1238e-4 * self.head / Tt)
         rho_v = rho_vs * HR
         prho_vpPhi_m = rho_v * 2.1238e-4 / Tt
@@ -434,6 +491,15 @@ class soil_layer(flux_node):
         return t2
 
     @property
+    def latent_liquid(self):
+
+        rho_l = 1  # g cm-3 density of water
+        L_0 = 2270  # [J g-1]
+        c_l = 4.187  # Specific Heat at Constant Temperature [J g-1 K-1]
+
+        return rho_l * c_l * (self.T - self.T0)
+
+    @property
     def latent(self):
 
         rho_l = 1  # g cm-3 density of water
@@ -442,22 +508,100 @@ class soil_layer(flux_node):
 
         return rho_l * (L_0 + c_v * (self.T - self.T0))
 
+    @property
+    def cv_sat(self):
+        """
+        Returns the saturated water vapor volumetric mass (m**3_H20/m**3) .
+
+        T_atmosphere = Temperature in Kelvin
+
+        pv_sat = saturated water vapor volumetric mass (m**3_H20/m**3)
+
+        TODO: Check for which temperature range it is valid
+        TODO: recheck the result with SLI
+        Control status: Checked on 03.06.2024 --> Results are the same as for SLI
+        """
+
+        # SLI: sli_utils.f90::L1416
+        Mw = 0.018015999346971512  # Molecular weight of water (kg / mol)
+        R = 8.3142995834350586  # universal gas constant (j / mol / k)
+
+        cv_sat = self.p_sat * Mw / R / self.T / 1000  # m3/m3
+        # cv_sat = 0.002166 * self.p_sat / self.T * 1000  # m3/m3
+
+        return cv_sat
+
+    @property
+    def p_sat(self):
+        """
+        Returns the Saturation vapour pressure, ps, in pascal based on Goff and Gratch and valid over the range 0 to 60 Degree celsius
+
+        T_atmosphere = Temperature in Kelvin
+
+        p_sat = Saturation vapour pressure, ps, in pascal
+
+        <--checked and own implementation is okay for temp. above 273.15 Kelvin
+        """
+        # SLI: cable_sli_utils.f90::L2195-2195
+        Tzero = 273.16000366210938
+        p_sat = 610.59999465942383 * exp(
+            17.270000457763672 * (self.T - Tzero) /
+            ((self.T - Tzero) + 237.30000305175781))  # Saturation vapour pressure, ps, in pascal
+
+        if self.T < 273.16:  # below 0 Degree celsius
+            p_sat = -4.86 + 0.855 * p_sat + 0.000244 * p_sat ** 2  # ps for ice
+
+        return p_sat
+
+    @property
+    def phiv(self):
+
+        dva = 2.1699999706470408E-005 * 10 ** 4  # vapour diffusivity of water in air at 0 degC [cm2/s]
+
+        p = dva * self.tortuosity * (self.theta * exp(self.c() * self.h) - self.theta * self._int)
+
+    def c(self):
+
+        # cable_sli_utils.f90, l:2114
+        Tzero = 273.16000366210938
+        Mw = 0.018015999346971512  # Molecular weight of water (kg / mol)
+        R = 8.3142995834350586  # universal gas constant (j / mol / k)
+        gravity = 9.8000001907348633  # gravity acceleration (m/s2)
+
+        return Mw * gravity / R / (self.T + Tzero) / 100  # cm-1
+
+    @property
+    def h(self):
+
+        if self.S < 1:
+            return self.phi * self.v3
+        elif self.S >= 1:
+            return self.phi
+        else:
+            raise NotImplementedError
+
     """Functions"""
 
     def calc_theta(self, head):
-        h = min(head, -13)  # cm
+
+        """Brooks - Corey(1964) """
+
+        h = min(head, self.phi)  # cm
         h = max(h, -3.0e10)  # cm
 
-        th = abs((h / self.phi) ** (-1 / self.b)) * self.theta_sat
+        th = abs((h / self.phi) ** (-self.lamda)) * self.theta_sat
 
         return th
 
     def calc_head(self, theta):
-        h = self.phi * abs((theta / self.theta_sat) ** (-self.b))
-        h = max(h, -5.0e9)  # cm
-        h = min(h, -13.0)  # cm
 
-        return h
+        """Brooks - Corey(1964) """
+
+        h = self.phi * abs((theta / self.theta_sat) ** (-1 / self.lamda))
+        hd = max(h, -5.0e9)  # cm
+        head = min(hd, self.phi)  # cm
+
+        return head
 
     def distance(self, to_point):
 

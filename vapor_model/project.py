@@ -43,34 +43,52 @@ class project(object):
         c = cell.cell(atmosphere=atmosphere)
         self.__cells.append(c)
 
-    def run(self, dt=1, dt_max=60, epsilon=1e-4):
+    def run(self, dt=1, dt_max=60, epsilon=1e-4, model='proposed',
+            water_flux=True, heat_flux=True, vapor_flux=True):
 
-        self.water_equation(delta_t=dt, epsilon=epsilon)
+        if model == 'proposed':
 
-        self.heat_equation(delta_t=dt, epsilon=epsilon)
+            if water_flux:
+                self.water_equation(delta_t=dt, epsilon=epsilon)
 
-        dt = self.vapor_equation(delta_t=dt, dt_max=dt_max, epsilon=epsilon)
+            if heat_flux:
+                self.heat_equation(delta_t=dt, epsilon=epsilon)
+
+            if vapor_flux:
+                dt = self.vapor_equation(delta_t=dt, dt_max=dt_max, epsilon=epsilon)
+
+        elif model == "coupled":
+
+            dt = self.coupled_equation(delta_t=dt, dt_max=dt_max, epsilon=epsilon)
+
+        else:
+            raise NotImplementedError
 
         return dt
 
     def water_equation(self, delta_t, epsilon=1e-4):
 
-        self.update_boundaries()
+        ph = self.get_layers()[0].phi
+
+        self.cells[0].update_boundary_head()
+        self.cells[0].update_boundary_T()
 
         headt = self.solve(delta_t, equation='w')
-        headt[headt > -0.13] = -0.13
+        headt[headt > ph] = ph
 
         water_fail = 1
         p = 0
-        head = None
         while p < 5:
             p += 1
             head = headt
             self.cells[0].update_head(head)
-            self.update_boundaries()
+            self.cells[0].update_boundary_head()
+            self.cells[0].update_boundary_T()
 
             headt = self.solve(delta_t=delta_t, equation='w')
-            headt[headt > -0.13] = -0.13
+            headt[headt > ph] = ph
+
+            self.cells[0].update_head(headt)
 
             max1, max2 = np.max(np.abs(headt - head) / np.max(np.abs(head))), 0.00
 
@@ -80,22 +98,21 @@ class project(object):
             if p == 5:
                 delta_t, water_fail = delta_t / 2, 1
 
-        self.cells[0].update_head(head)
-
     def heat_equation(self, delta_t, epsilon=1e-4):
 
-        self.update_boundaries()
+        # self.cells[0].update_boundary_T()
         tempt = self.solve(delta_t, equation='h')
 
         heat_fail = 1
         p = 0
-        temp = None
         while p < 5:
             p += 1
             temp = tempt
-            self.cells[0].update_temperature(temp), self.update_boundaries()
+            self.cells[0].update_temperature(temp)
+            # self.cells[0].update_boundary_T()
 
             tempt = self.solve(delta_t=delta_t, equation='h')
+            self.cells[0].update_temperature(tempt)
 
             max1, max2 = 0.0, np.max(np.abs(tempt - temp) / np.max(np.abs(temp)))
 
@@ -105,19 +122,20 @@ class project(object):
             if p == 5:
                 delta_t, heat_fail = delta_t / 2, 1
 
-        self.cells[0].update_temperature(temp)
-
     def vapor_equation(self, delta_t, dt_max, epsilon=1e-4):
+
+        ph = self.get_layers()[0].phi  # param phi_e
 
         headt = np.array([l.head for l in self.cells[0].layers])
         tempt = np.array([l.T for l in self.cells[0].layers])
 
-        self.update_boundaries()
+        # self.cells[0].update_boundary_head()
+        # self.cells[0].update_boundary_T()
         head, T = self.solve(delta_t, equation='v')
 
-        headss = headt + head
-        tempss = T + tempt
-        headss[headss > -0.13] = -0.13
+        headss = headt + np.array(head)
+        tempss = tempt + np.array(T)
+        headss[headss > ph] = ph
 
         p = 0
         while p < 5:
@@ -127,14 +145,17 @@ class project(object):
             temps = 0.5 * (tempss + tempt)
 
             self.cells[0].update_head(heads), self.cells[0].update_temperature(temps)
-            self.update_boundaries()
+            self.cells[0].update_boundary_head()
+            self.cells[0].update_boundary_T()
 
             head, temp = self.solve(delta_t=delta_t, equation='v')
 
-            headss = headt + head
-            headss[headss > -0.13] = -0.13
+            headss = headt + np.array(head)
+            headss[headss > ph] = ph
 
-            tempss = temp + tempt
+            tempss = tempt + np.array(temp)
+
+            self.cells[0].update_head(headss), self.cells[0].update_temperature(tempss)
 
             max1 = np.max(np.abs(headss - headp) / np.max(np.abs(headp)))
             max2 = np.max(np.abs(tempss - tempp) / np.max(np.abs(tempp)))
@@ -145,8 +166,6 @@ class project(object):
 
             if p == 5:
                 delta_t = delta_t / 2
-
-        self.cells[0].update_head(head), self.cells[0].update_temperature(temp)
 
         return delta_t
 
@@ -181,8 +200,8 @@ class project(object):
             else:
                 raise NotImplementedError
 
-            a = A.tocsr()
-            b = B
+            a = A.tocsr()  # .astype(np.float64)
+            b = B  # .astype(np.float64)
 
         except ValueError:
             raise NotImplementedError
@@ -205,6 +224,7 @@ class project(object):
 
             mat_B[index_s] -= c_evap.q_evap * dt / s.thickness
 
+            ql = []
             for c in self.cells[0].water_connections:
 
                 if isinstance(c, fluxes.water_flux):
@@ -216,17 +236,27 @@ class project(object):
                     hy_cond_pot, q_tmp_water = c.hy_conduct_potential() * r, c.q_tmp_water() * r
 
                     mat_A[index_l, index_r] -= hy_cond_pot
-                    mat_A[index_r, index_l] -= hy_cond_pot
                     mat_A[index_l, index_l] += hy_cond_pot
                     mat_A[index_r, index_r] += hy_cond_pot
 
-                    mat_B[index_l] += q_tmp_water
-                    mat_B[index_r] -= q_tmp_water
+                    if not c.right_node == storages[-1]:
+                        mat_A[index_r, index_l] -= hy_cond_pot
+
+                    if not c.left_node == storages[0]:
+                        mat_B[index_l] -= q_tmp_water
+
+                    if not c.right_node == storages[-1]:
+                        mat_B[index_r] += q_tmp_water
+
+                    dz = c.left_node.distance(c.right_node)
+                    ql.append(c.q_water() / dz)
 
                 else:
                     raise NotImplementedError
 
-            mat_A[0, 0], mat_B[0] = 1, self.cells[0].layers[0].head
+            self.cells[0].liquid_fluxes = ql
+
+            mat_A[-1, -1], mat_B[-1] = 1, self.cells[0].layers[-1].head
 
         except ValueError:
             raise NotImplementedError
@@ -243,20 +273,26 @@ class project(object):
                 r = self.r(c, dt)
                 th_con, th_con_pot = c.th_conductivity() * r, c.th_hy_conductivity_T0() * r
 
-                mat_A[index_l, index_r] -= th_con
-                mat_A[index_r, index_l] -= th_con
+                if not index_l == 0:  # if left node is the boundary  storages(layer)
+                    mat_A[index_l, index_r] -= th_con
+
+                if not c.right_node == storages[-1]:  # if right node it the boundary layer (storage)
+                    mat_A[index_r, index_l] -= th_con
+
                 mat_A[index_l, index_l] += th_con
                 mat_A[index_r, index_r] += th_con
 
                 if c.right_node.head > c.left_node.head:
-                    mat_A[index_l, index_r] -= c.th_hy_conductivity_correction() * r
-                    mat_A[index_l, index_r] += c.th_hy_conductivity_correction() * r
+                    if not index_l == 0:
+                        mat_A[index_l, index_r] -= c.th_hy_conductivity_correction() * r
+                    mat_A[index_r, index_r] += c.th_hy_conductivity_correction() * r
                 else:
-                    mat_A[index_r, index_l] += c.th_hy_conductivity_correction() * r
-                    mat_A[index_l, index_r] -= c.th_hy_conductivity_correction() * r
+                    if not c.right_node == storages[-1]:
+                        mat_A[index_r, index_l] += c.th_hy_conductivity_correction() * r
+                    mat_A[index_l, index_l] -= c.th_hy_conductivity_correction() * r
 
-                mat_B[index_l] += th_con_pot
-                mat_B[index_r] -= th_con_pot
+                mat_B[index_l] -= th_con_pot
+                mat_B[index_r] += th_con_pot
 
             l_left, l_right = self.cells[0].layers[0], self.cells[0].layers[-1]
 
@@ -270,10 +306,14 @@ class project(object):
 
         try:
 
+            qv = [c.q_vapor() / c.left_node.distance(c.right_node) for c in self.cells[0].vapor_connections]
+
             q_vapor = [self.r(c, dt) * c.q_vapor() for c in self.cells[0].vapor_connections]
             qv_latent = [s.latent for s in storages]
-            h, T = [], []
 
+            self.cells[0].vapor_fluxes = np.array(qv)
+
+            h, T = [], []
             # left boundary
             qv_right, qv_left = q_vapor[0], 0
 
@@ -286,8 +326,7 @@ class project(object):
 
             qv_latent_left = 0
 
-            B = [qv_right - qv_left,
-                 qv_latent_right - qv_latent_left]
+            B = [qv_right - qv_left, qv_latent_right - qv_latent_left]
             A = np.array([[storages[0].H1, storages[0].H2],
                           [storages[0].T2, storages[0].T1]])
 
@@ -359,10 +398,161 @@ class project(object):
         except ValueError:
             raise NotImplementedError
 
+    def coupled_equation(self, delta_t, dt_max, epsilon=1e-4):
+
+        ph = self.get_layers()[0].phi  # param phi_e
+
+        storages = list(self.get_layers())
+
+        headt = np.array([l.head for l in self.cells[0].layers])
+        tempt = np.array([l.T for l in self.cells[0].layers])
+
+        # self.cells[0].update_boundary_head()
+        self.cells[0].update_boundary_T()
+        head, T = self.coupled_solver(storages, delta_t)
+
+        headss = headt + np.array(head)
+        tempss = tempt + np.array(T)
+
+        headss[-1] = head[-1]
+        headss[headss > ph] = ph
+        tempss[0], tempss[-1] = T[0], T[-1]
+
+        p = 0
+        while p < 5:
+
+            p += 1
+            headpp, tempp = headss, tempss
+            heads = 0.5 * (headss + headt)
+            temps = 0.5 * (tempss + tempt)
+
+            self.cells[0].update_head(heads), self.cells[0].update_temperature(temps)
+            # self.cells[0].update_boundary_head()
+            self.cells[0].update_boundary_T()
+
+            head, temp = self.coupled_solver(storages, delta_t)
+
+            headss = headt + np.array(head)
+            tempss = tempt + np.array(temp)
+
+            headss[-1] = head[-1]
+            headss[headss > ph] = ph
+            tempss[0], tempss[-1] = T[0], T[-1]
+
+            max1 = np.max(np.abs(headss - headpp) / np.max(np.abs(headpp)))
+            max2 = np.max(np.abs(tempss - tempp) / np.max(np.abs(tempp)))
+
+            if np.maximum(max1, max2) < epsilon:
+                p, head, temp = 6, headss, tempss
+                delta_t = np.minimum(dt_max, delta_t * 1.5)
+
+            if p == 5:
+                delta_t = delta_t / 2
+
+        self.cells[0].update_head(headss), self.cells[0].update_temperature(tempss)
+
+        self.cells[0].liquid_fluxes = [c.q_water() / c.left_node.distance(c.right_node)
+                                       for c in self.cells[0].water_connections]
+        self.cells[0].vapor_fluxes = [c.q_vapor() / c.left_node.distance(c.right_node)
+                                      for c in self.cells[0].vapor_connections]
+
+        return delta_t
+
+    def coupled_solver(self, storages, dt):
+
+        h, T = [], []
+
+        ql_latent = [s.latent_liquid for s in storages]
+        qv_latent = [s.latent for s in storages]
+
+        # upper Boundary
+        s0 = storages[0]
+        left_c, right_c = s0.connections_to_left, s0.connections_to_right
+        q_evap = s0.connections_to_boundaries[0].q_evap
+
+        ql_left, ql_right = 0, right_c[0].q_water() * self.r(right_c[0], dt)
+        qv_left, qv_right = dt / s0.thickness * q_evap, right_c[2].q_vapor() * self.r(right_c[2], dt)
+
+        # solving
+        A = [[s0.H1, 0], [0, 1]]
+        B = [ql_right + qv_right - ql_left - qv_left, s0.T]
+
+        mat_A = csr_matrix(A)
+        kk = spsolve(mat_A, B)
+        h.append(kk[0]), T.append(kk[1])
+
+        for i, s in enumerate(storages[1:-1]):
+
+            left_c, right_c = s.connections_to_left, s.connections_to_right
+
+            ql_left = left_c[0].q_water() * self.r(left_c[0], dt)
+            ql_right = right_c[0].q_water() * self.r(right_c[0], dt)
+
+            qv_left = left_c[2].q_vapor() * self.r(left_c[2], dt)
+            qv_right = right_c[2].q_vapor() * self.r(right_c[2], dt)
+
+            q_cond_left = left_c[1].q_cond() * self.r(left_c[1], dt)
+            q_cond_right = right_c[1].q_cond() * self.r(right_c[1], dt)
+
+            # latent liquid
+            if ql_right > 0:
+                ql_latent_right = ql_latent[i + 1] * ql_right
+            elif ql_right < 0:
+                ql_latent_right = ql_latent[i] * ql_right
+            else:
+                ql_latent_right = 0
+
+            if ql_left > 0:
+                ql_latent_left = ql_latent[i] * ql_left
+            elif ql_left < 0:
+                ql_latent_left = ql_latent[i - 1] * ql_left
+            else:
+                ql_latent_left = 0
+
+            # latent vapor
+            if qv_right > 0:
+                qv_latent_right = qv_latent[i + 1] * qv_right
+            elif qv_right < 0:
+                qv_latent_right = qv_latent[i] * qv_right
+            else:
+                qv_latent_right = 0
+
+            if qv_left > 0:
+                qv_latent_left = qv_latent[i] * qv_left
+            elif qv_left < 0:
+                qv_latent_left = qv_latent[i - 1] * qv_left
+            else:
+                qv_latent_left = 0
+
+            # solving
+            A = [[s.H1, s.H2],
+                 [s.T2, s.T1]]
+            B = [ql_right + qv_right - ql_left - qv_left,
+                 q_cond_right - q_cond_left + ql_latent_right - ql_latent_left + qv_latent_right - qv_latent_left]
+
+            mat_A = csr_matrix(A)
+            kk = spsolve(mat_A, B)
+            h.append(kk[0]), T.append(kk[1])
+
+        # Lower Boundary
+        sn = storages[-1]
+        left_c, right_c = sn.connections_to_left, sn.connections_to_right
+
+        ql_left, ql_right = left_c[0].q_water() * self.r(left_c[0], dt), 0
+        qv_left, qv_right = left_c[2].q_vapor() * self.r(left_c[2], dt), 0
+
+        A = [[sn.H1, 0], [0, 1]]
+        B = [ql_right + qv_right - ql_left - qv_left, sn.T]
+
+        mat_A = csr_matrix(A)
+        kk = spsolve(mat_A, B)
+        h.append(kk[0]), T.append(kk[1])
+
+        return h, T
+
     def r(self, connection, dt):
 
         dist = connection.left_node.distance(connection.right_node)
         r = dt / dist / dist
 
         return r
-

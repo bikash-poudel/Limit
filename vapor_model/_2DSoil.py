@@ -2,7 +2,7 @@
 import numpy as np
 from math import sin, pi
 
-from project import project
+import project
 import storage
 
 

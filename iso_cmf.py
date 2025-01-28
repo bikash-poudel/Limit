@@ -4,6 +4,7 @@ import cmf
 
 from datetime import datetime, timedelta
 import numpy as np
+import vapor_model
 
 import matplotlib.pyplot as plt
 
@@ -46,12 +47,8 @@ def rtn_curve():
     Braud_theta_r = 0.01
     Braud_eta = 9.14
 
-    vgm = cmf.VanGenuchtenMualem(Ksat=Braud_Ksat,
-                                 phi=Braud_phi,
-                                 alpha=Braud_alpha,
-                                 n=Braud_n,
-                                 m=Braud_m,
-                                 theta_r=Braud_theta_r)
+    vgm = cmf.VanGenuchtenMualem(Ksat=Braud_Ksat, phi=Braud_phi, alpha=Braud_alpha, n=Braud_n, m=Braud_m, theta_r=Braud_theta_r)
+
 
     # Oversaturation tolerence upto 1% for matrix pot = +1
     vgm.w0 = 0.9995  # See: https://philippkraft.github.io/cmf/cmf_tut_retentioncurve.html Oversaturation
@@ -85,7 +82,7 @@ def cmf_boundary(P):
     # Create the boundary condition
     #gw = P.NewOutlet('groundwater', x=0, y=0, z=-1.01)
     q_bot = P.NewNeumannBoundary('q_bot', cell.layers[-1])
-    q_bot.flux = 0.022
+    q_bot.flux = 0.002
 
     # Set the potential
     # gw.potential = 1.01
@@ -237,7 +234,7 @@ def iso_setup():
     return p, P
 
 
-def run(p, P, sim_period=50, dt=1, **kwargs):
+def run(p, P, sim_period=50, dt=1, solutes=["2H", "18O"], **kwargs):
 
     """"
     sim_period: days
@@ -253,15 +250,13 @@ def run(p, P, sim_period=50, dt=1, **kwargs):
     end = start + timedelta(days=sim_period)
     timestep = timedelta(hours=dt)
 
-    solutes = ["2H", "18O"]
+
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
     for t in solver.run(start, end, timestep):
 
         print(t)
-        c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
-        c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
-
         print([l.theta for l in C.layers])
+        c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         update_storages(c_iso=c, c_cmf=C), update_boundaries(c_iso=c, c_cmf=C, time=t)
         for solute in solutes:

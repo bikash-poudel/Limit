@@ -145,7 +145,6 @@ class iso_project(object):
                 else:
                     index_l = storages.index(c.left_node)  # index of left storage node
                     index_r = storages.index(c.right_node)  # index of right storage node
-
                     if isinstance(c, (iso_fluxes.liquid_advection, iso_fluxes.vapor_advection)):
                         A[index_r, index_r] += c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
                         A[index_l, index_r] -= c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)

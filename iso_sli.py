@@ -114,6 +114,7 @@ def get_sli(testcase=1):
 
 
 def _layers(c, sli, testcase):
+
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     dt = 0  # initial states
@@ -197,6 +198,7 @@ def _atm(sli, testcase):
 
 
 def update_storages(c, sli, dt):
+
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
     # Need not update atmosphere
@@ -347,9 +349,9 @@ def enrichment_max(Isotopologue, testcase, delta):
 
 
 sli = get_sli(testcase=1)
-delta = run_testcases([1])
-#visualize(delta=delta, sli=sli, Isotopologue="2H")
-#visualize(delta=delta, sli=sli, Isotopologue="18O")
+delta = run_testcases([1, 2, 3, 4, 5, 6])
+visualize(delta=delta, sli=sli, Isotopologue="2H")
+visualize(delta=delta, sli=sli, Isotopologue="18O")
 
 #ignore = test_case(testcase=1)
 #d = iso_setup(sli=slI, testcase=2, **ignore)
