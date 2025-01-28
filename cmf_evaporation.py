@@ -12,7 +12,7 @@ cell = project.NewCell(x=0,y=0,z=0,area=1000, with_surfacewater=True)
 r_curve = cmf.VanGenuchtenMualem(Ksat=0.0106272, phi=0.35, alpha=0.01, n=2.0)
 r_curve.w0 = 0.9995
 r_curve.l = 0.67
-r_curve.K = r_curve.Ksat * pow(r_curve.w0, 9.14)
+r_curve.K = r_curve.Ksat * pow(r_curve.w0, 9.14)git statsss
 """
 
 r_curve = cmf.BrooksCoreyRetentionCurve(ksat=0.0106272, porosity=0.35, _b=1/0.22, theta_x=0.3499)
