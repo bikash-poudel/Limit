@@ -377,18 +377,20 @@ class isotope(object):
         self.c_iso.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed internally, else list of qv, len = len(layers)
 
 
+########### cmf #############
 _cmf = cmf_iso(r_curve='VGM')
-
-L_boundaries = np.arange(0.1, 1.1, 0.1)
+L_boundaries = np.arange(0.1, 1.1, 0.01)
 pcmf = _cmf.cmf_setup(l_boundaries=L_boundaries)  # cmf project
 ccmf = pcmf.cells[0]  # cmf cell
-_cmf.cmf_boundary(c=ccmf, et_pot=10)  # 1.005 * 10 ** - 5 kg m-2 s-1 to mm day-1
+_cmf.cmf_boundary(c=ccmf)  # 1.005 * 10 ** - 5 kg m-2 s-1 to mm day-1
 
+########### vapor #############
 _vapor = vapor_iso(cell_cmf=ccmf)
 _vapor.soil_vapor_setup()  # vapor module
 pvapor = _vapor.project  # vapor project
 cvapor = pvapor.cells[0]  # vapor cell
 
+######### iso ###########
 piso = iso_project()
 _iso = isotope(p_iso=piso, p_cmf=pcmf, p_vapor=pvapor, testcase=1)
 _iso.iso_soil_setup()
@@ -404,34 +406,31 @@ ev_act, trp_act = [], []
 q_liquid, q_vapor = [], []
 theta = []
 count = 1
+f = 1 / 8600 / 1000  # factor to convert [mm day-1] (m3 day-1) to [ms-1]
 for t in solver.run(start, end, timestep):
     print(count, ' ', t)
 
-    f = 1 / 8600 / 1000  # factor to convert [mm day-1] (m3 day-1) to [ms-1]
     qev, trp = ccmf.evaporation(t), ccmf.transpiration(t)
     ql = [l.flux_to(next_l, t) for l, next_l in zip(ccmf.layers[:-1], ccmf.layers[1:])]  # downward flux
-
-    print('theta cmf')
-    print([l.theta for l in ccmf.layers])
 
     # run vapor model
     _vapor.update_evap(cvapor, qev=qev * f * 100)  # since q in vapor model is in cm s-1
     _vapor.update_theta(c_cmf=ccmf, c_vapor=cvapor)  # update vapor with new theta
     _vapor.run(initial_dt=60, simulation_time=timestep.seconds)
     qv = np.array(cvapor.vapor_fluxes) * 10 * 86400  # cms-1 to mm day-1
-
+    
     # update cmf with new theta
-    #_cmf.update_theta(c_cmf=ccmf, c_vapor=cvapor)
+    _cmf.update_theta(c_cmf=ccmf, c_vapor=cvapor)
 
     # update and run iso
     _iso.update_iso_storages(), _iso.update_iso_boundaries(t)
     _iso.run_iso(solutes=["2H"], dt=timestep.seconds)
 
-    print(ciso.conc_2H_delta)
+    #print(ciso.conc_2H_delta)
 
     theta.append(ccmf.layers.theta)
     ev_act.append(qev), trp_act.append(trp)
-    q_liquid.append(ql)#, q_vapor.append(qv)
+    q_liquid.append(ql), q_vapor.append(qv)
 
     count += 1
 

@@ -133,9 +133,8 @@ class project(object):
         # self.cells[0].update_boundary_T()
         head, T = self.solve(delta_t, equation='v')
 
-        headss = headt + np.array(head)
+        headss = np.clip(headt + np.array(head), None, ph)  # Clip headss to ph
         tempss = tempt + np.array(T)
-        headss[headss > ph] = ph
 
         p = 0
         while p < 5:
@@ -150,9 +149,7 @@ class project(object):
 
             head, temp = self.solve(delta_t=delta_t, equation='v')
 
-            headss = headt + np.array(head)
-            headss[headss > ph] = ph
-
+            headss = np.clip(headt + np.array(head), None, ph)  # Clip headss to ph
             tempss = tempt + np.array(temp)
 
             self.cells[0].update_head(headss), self.cells[0].update_temperature(tempss)
@@ -264,11 +261,12 @@ class project(object):
     def heat_flux_matrix(self, mat_A, mat_B, storages, dt):
 
         try:
+            node_indices = {node: idx for idx, node in enumerate(storages)}
 
             for c in self.cells[0].heat_connections:
 
-                index_l = storages.index(c.left_node)  # index of left storage node
-                index_r = storages.index(c.right_node)  # index of right storage node
+                index_l = node_indices[c.left_node]  # Index of left storage node
+                index_r = node_indices[c.right_node]  # Index of right storage node
 
                 r = self.r(c, dt)
                 th_con, th_con_pot = c.th_conductivity() * r, c.th_hy_conductivity_T0() * r
@@ -276,7 +274,7 @@ class project(object):
                 if not index_l == 0:  # if left node is the boundary  storages(layer)
                     mat_A[index_l, index_r] -= th_con
 
-                if not c.right_node == storages[-1]:  # if right node it the boundary layer (storage)
+                if index_r != len(storages) - 1: # not c.right_node == storages[-1]:  # if right node is not the boundary layer (storage)
                     mat_A[index_r, index_l] -= th_con
 
                 mat_A[index_l, index_l] += th_con
@@ -306,12 +304,14 @@ class project(object):
 
         try:
 
-            qv = [c.q_vapor() / c.left_node.distance(c.right_node) for c in self.cells[0].vapor_connections]
+            vapor_connections = self.cells[0].vapor_connections
+            q_vapor = np.array([self.r(c, dt) * c.q_vapor() for c in vapor_connections])
+            qv_latent = np.array([s.latent for s in storages])
 
-            q_vapor = [self.r(c, dt) * c.q_vapor() for c in self.cells[0].vapor_connections]
-            qv_latent = [s.latent for s in storages]
+            distances = np.array([c.left_node.distance(c.right_node) for c in vapor_connections])
+            qv = q_vapor / distances
 
-            self.cells[0].vapor_fluxes = np.array(qv)
+            self.cells[0].vapor_fluxes = qv
 
             h, T = [], []
             # left boundary
@@ -326,14 +326,13 @@ class project(object):
 
             qv_latent_left = 0
 
-            B = [qv_right - qv_left, qv_latent_right - qv_latent_left]
-            A = np.array([[storages[0].H1, storages[0].H2],
-                          [storages[0].T2, storages[0].T1]])
-
+            B = np.array([qv_right - qv_left, qv_latent_right - qv_latent_left])
+            A = np.array([[storages[0].H1, storages[0].H2], [storages[0].T2, storages[0].T1]])
             mat_A = csr_matrix(A)
 
             kk = spsolve(mat_A, B)
-            h.append(kk[0]), T.append(kk[1])
+            h.append(kk[0])
+            T.append(kk[1])
 
             for i, storage in enumerate(storages[1:-1]):
 
@@ -353,12 +352,13 @@ class project(object):
                 else:
                     qv_latent_left = 0
 
-                B = [qv_right - qv_left, qv_latent_right - qv_latent_left]
+                B = np.array([qv_right - qv_left, qv_latent_right - qv_latent_left])
                 A = np.array([[storage.H1, storage.H2], [storage.T2, storage.T1]])
-
                 mat_A = csr_matrix(A)
+
                 kk = spsolve(mat_A, B)
-                h.append(kk[0]), T.append(kk[1])
+                h.append(kk[0])
+                T.append(kk[1])
 
             # right boundary
 
@@ -372,12 +372,13 @@ class project(object):
             else:
                 qv_latent_left = 0
 
-            B = [qv_right - qv_left, qv_latent_right - qv_latent_left]
-            A = np.array([[storages[0].H1, storages[0].H2], [storages[0].T2, storages[0].T1]])
-
+            B = np.array([qv_right - qv_left, qv_latent_right - qv_latent_left])
+            A = np.array([[storages[-1].H1, storages[-1].H2], [storages[-1].T2, storages[-1].T1]])
             mat_A = csr_matrix(A)
+
             kk = spsolve(mat_A, B)
-            h.append(kk[0]), T.append(kk[1])
+            h.append(kk[0])
+            T.append(kk[1])
 
         except ValueError:
             raise NotImplementedError
