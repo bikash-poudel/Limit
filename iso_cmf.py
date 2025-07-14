@@ -1,32 +1,43 @@
-import cProfile
 
 import cmf
 
 from datetime import datetime, timedelta
-import numpy as np
-import vapor_model
-
 import matplotlib.pyplot as plt
 
 from src import *
 
 
-def visualize(p, delta, Isotopologue='2H'):
+def visualize(p, delta, dz, Isotopologue='2H'):
 
     depth = [-l.center.z for l in p.get_cells()[0].layers]
     plt.figure(figsize=(7, 10))
     for tests in delta.keys():
-        plt.plot(delta[tests][Isotopologue], depth, label='test_{}'.format(tests))
+        plt.plot(delta[tests][Isotopologue][-1][:dz], depth[:dz], label='test_{}'.format(tests))
 
     plt.xlabel(r'$\delta$ {}'.format(Isotopologue))
     plt.ylabel('depth $[m]$')
     plt.title('Initial testcases after 250 days')
+    plt.grid()
     plt.legend(loc='lower right')
     plt.show()
 
 
-###### cmf ######
+def _theta(psi):
+    alpha = 1/19.3
+    n = 2.22
+    m = 0.099
+    theta_r = 0.00
+    theta_sat = 0.35
+
+    S = (1 + (alpha * 100 * psi) ** n) ** -m
+
+    return S * (theta_sat - theta_r) + theta_r
+
+
+###########################################################
+############################ cmf ##########################
 def cmf_project():
+
     # Create a project
     p = cmf.project()
 
@@ -37,21 +48,21 @@ def cmf_project():
 
 
 def rtn_curve():
+
     # Set up a soil retention curve
     # With parameters as per SISPAT (Braud et al. 2005) Yolo Light clay (Philip, 1957)
-    Braud_Ksat = 0.0106272  # in m/d
-    Braud_phi = 0.35  # porosity
-    Braud_alpha = 0.193  # Scale value of the water pressure(m)
-    Braud_n = 2.22
-    Braud_m = 0.099
-    Braud_theta_r = 0.01
-    Braud_eta = 9.14
 
-    vgm = cmf.VanGenuchtenMualem(Ksat=Braud_Ksat, phi=Braud_phi, alpha=Braud_alpha, n=Braud_n, m=Braud_m, theta_r=Braud_theta_r)
+    vgm = cmf.VGM_BC_RetentionCurve_Windhorst(Ksat=0.0106272,   # m/d
+                                              phi=0.35,         # porosity
+                                              alpha=1/19.3,     # inverse of air entry potential (Scale value of the water pressure(m))
+                                              n=2.22,
+                                              m=0.099,
+                                              theta_r=0.01,
+                                              eta=9.14,
+                                              )
 
-
-    # Oversaturation tolerence upto 1% for matrix pot = +1
-    vgm.w0 = 0.9995  # See: https://philippkraft.github.io/cmf/cmf_tut_retentioncurve.html Oversaturation
+    vgm.l = 0.67
+    vgm.w0 = 0.99999    # Oversaturation tolerence upto 1% for matrix pot = +1
 
     return vgm
 
@@ -59,9 +70,8 @@ def rtn_curve():
 def add_cmf_layers(cell, l_boundaries, r_curve):
 
     for d in l_boundaries:
-        l = cell.add_layer(d, r_curve)
-        l.wetness = 1  ##### Check tehts exceeds porosity if  l.wetness = 1.0
-        # c.saturated_depth = 0  # check for wetness = 1, saturated depth = 0,
+        cell.add_layer(d, r_curve)
+    cell.saturated_depth = 0
 
 
 def add_connections(cell, connection=cmf.Richards):
@@ -72,75 +82,67 @@ def cmf_boundary(P):
 
     cell = P.cells[0]
 
-    #evap = P.NewNeumannBoundary('evap', cell.layers[0])
-    #evap.flux = - 0.866592  # cum day-1
+    stress = cmf.ContentStress(theta_d=0.345, theta_w=0.12)
+    cell.set_uptakestress(stress)
 
-    ETpot = cmf.timeseries.from_scalar(0.55)
-    #for l in cell.layers:
+    ETpot = cmf.timeseries.from_scalar(60)
     cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
-
-    # Create the boundary condition
-    #gw = P.NewOutlet('groundwater', x=0, y=0, z=-1.01)
-    q_bot = P.NewNeumannBoundary('q_bot', cell.layers[-1])
-    q_bot.flux = 0.002
-
-    # Set the potential
-    # gw.potential = 1.01
-    # Connect the lowest layer to the groundwater using Richards percolation
-    # cmf.Richards(cell.layers[-1], gw)
-
-
-    # summer = cmf.Weather(Tmin=16, Tmax=28, rH=50, wind=1.0, sunshine=0.9, daylength=16, Rs=26)
-    # cell.set_weather(summer)
-    # cmf.TurcET(cell.layers[0], cell.evaporation)
 
 
 def cmf_setup():
+
     # CMF setup
     P, C = cmf_project()  # define project and cell
 
-    L_boundaries = np.arange(0.01, 1.01, 0.05)  # define layer thicknesses
+    # L_boundaries = np.array([0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
+      #                       1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
+
+    L_boundaries = np.cumsum([0.01] * 100)
+
     add_cmf_layers(C, L_boundaries, rtn_curve())  # define retention curve to all cell layers
     add_connections(C, connection=cmf.Richards)  # apply layer connection
-
     cmf_boundary(P)
 
     return P
 
 
-###### iso ######
+###########################################################
+########################## iso ############################
 
-def _atm():
-    # atmospheric variables
-    patm = 1  # from SLI_solve
-    Tatm = 303.17  # sli.Tatm(dt) + Tzero_sli
-    Rh_atm = 0.2  # sli.R_humidity_atm(dt)
-    wind_speed = 0.2  # sli.wind_speed(dt)
+def _atm(testcase):
 
-    c_iso_2H = iso_delta.delta_to_concentration(67, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
-    c_iso_18O = iso_delta.delta_to_concentration(31.9, '18O')
+    ali_2H, atm_2H = iso_delta.delta_testcases('2H', testcase=testcase)
+    ali_18O, atm_18O = iso_delta.delta_testcases('18O', testcase=testcase)
+    c_iso_2H = iso_delta.delta_to_concentration(atm_2H, '2H')
+    c_iso_18O = iso_delta.delta_to_concentration(atm_18O, '18O')
 
     atm = iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                          conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
-                         T=Tatm, Rh_atmosphere=Rh_atm,
-                         Pa_atmosphere=patm,
-                         wind_speed=wind_speed,
-                         hc=10,  # canopy height [m] (e.g. 40)
-                         d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
-                         z0m=0.1 * 10,
+                         T=303.17,              # K
+                         Rh_atmosphere=0.2,
+                         Pa_atmosphere=1,
+                         wind_speed=2,          # m/s
+                         hc=0.001,              # canopy height [m] (e.g. 40)
+                         d0=0.67 * 0.001,       # displacement height (e.g. 0.7 * hc)
+                         z0m=0.1 * 0.001,
                          # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
-                         LAI=1.1,  # leaf area index (e.g. 2.0)
-                         extku=1.5)
+                         LAI=0,  # leaf area index (e.g. 2.0)
+                         extku=0)
+
     return atm
 
 
-def _layers(c_iso, C_cmf):
+def _layers(c_iso, C_cmf, testcase):
 
-    # define iso layers as per cmf layer
+    """ c_iso: iso cell, c_cmf: cmf cell """
+
+    # define iso layers according to cmf-layers
     layers = C_cmf.layers
 
-    init_c_iso_2H = iso_delta.delta_to_concentration(0, '2H')  # 0.15367056287906838
-    init_c_iso_18O = iso_delta.delta_to_concentration(0, '18O')
+    ali_2H, atm_2H = iso_delta.delta_testcases('2H', testcase=testcase)
+    ali_18O, atm_18O = iso_delta.delta_testcases('18O', testcase=testcase)
+    init_c_iso_2H = iso_delta.delta_to_concentration(ali_2H, '2H')
+    init_c_iso_18O = iso_delta.delta_to_concentration(ali_18O, '18O')
 
     id = 0
     for lr in layers:
@@ -148,149 +150,180 @@ def _layers(c_iso, C_cmf):
                                                 upper_boundary=lr.upper_boundary,
                                                 lower_boundary=lr.lower_boundary,
                                                 conc_iso_liquid={"2H": init_c_iso_2H, "18O": init_c_iso_18O},
-                                                theta=lr.theta,
+                                                theta=min(lr.theta, lr.porosity),
                                                 theta_0=0.01,
                                                 theta_sat=lr.porosity,
                                                 tortuosity=0.67,
                                                 T=303.17,
                                                 psi=lr.matrix_potential
                                                 )
+
         id += 1
         c_iso.add_layer(new_layer)
+
     return c_iso
 
 
 def update_storages(c_iso, c_cmf):
 
-    # atmosphere need not be updated
+    """ c_iso: iso cell, c_cmf: cmf cell """
+
+    # atmosphere need not be updated #
 
     # Update layers
-    theta = [l.theta for l in c_cmf.layers]
+
+    # theta = [min(l.theta, l.porosity) for l in c_cmf.layers] # theta from cmf.
     T_soil = [303.17] * len(c_cmf.layers)
     rH = [None] * len(c_cmf.layers)
-    psi = [l.matrix_potential for l in c_cmf.layers]
+    psi = [min(l.matrix_potential, 0) for l in c_cmf.layers]
+    theta = [_theta(-p) for p in psi]   # theta from matrix potential
 
     c_iso.update_layers(theta=theta, T=T_soil, rH=rH, psi=psi)
 
 
 def update_boundaries(c_iso, c_cmf, time):
 
-    """c_iso: iso cell, c_cmf: cmf cell"""
-    # Update states and fluxes for
-    f = cmf.sec / cmf.day / c_cmf.area  # convert to m per second
+    """ c_iso: iso cell, c_cmf: cmf cell """
 
-    # soil fluxes
+    f = 1 / c_cmf.area / cmf.day.AsSeconds()  # factor [mm / day] to [m / s]
+
+    ###################### Soil fluxes ########################
     ql = []
-    qv = [0] * len(c_iso.layers)
     for lr in c_cmf.layers:
         if lr.upper is not None and lr.lower is None:
             ql.append(0.0 * f)
         else:
-            #ql.append(lr.flux_to(lr.lower, time) * f)
             ql.append(lr.flux_to(lr.lower, time) * f)
 
-    c_iso.update_liquid_fluxes(liquid_fluxes=ql)
-    #c_iso.update_vapor_fluxes(vapor_fluxes=None)  #vapor_fluxes=None: self compute vapor flux
+    c_iso.update_vapor_fluxes(vapor_fluxes=None)  # vapor_fluxes = None: self compute vapor flux
 
-    # boundary storage
+    ####### disntegrate fluxes into liquid and vapor fluxes ##########
+    qv = np.array(c_iso.vapor_fluxes + [0])
+    mask = np.abs(qv) > np.abs(ql)
+    ql_liquid = np.where(mask, 0, ql - qv)
+    qv_update = np.where(mask, ql, qv)
+    ##################################################################
 
-    f = 1 / c_cmf.area / 86400  # m3 day-1 to ms-1
-    q_evap = c_cmf.evaporation.fluxes(time)[0][0] * f  # c_cmf.layers[0].fluxes(time)[-1][0] * f
+    c_iso.update_vapor_fluxes(vapor_fluxes=qv_update)
+    c_iso.update_liquid_fluxes(liquid_fluxes=ql_liquid)
 
-    c_iso_2H = iso_delta.delta_to_concentration(67, '2H')  # sli.civa(1) / sli.cva(1)  0.15367056287906838
-    c_iso_18O = iso_delta.delta_to_concentration(31.9, '18O')
+    ##################### Surface fluxes ##############################
+    atm = flux_atmosphere(atmosphere=c_iso.atmosphere, top_layer=c_iso.layers[0])
+    fql, fqv = atm.E_liquid() / atm.E_total(), atm.E_vapor() / atm.E_total()  # factors determining surface fluxes
 
-    c_iso.update_neuman_boundary(q_neuman=q_evap, c_neuman={"2H": c_iso_2H, "18O": c_iso_18O})
-
-    #c_iso.update_evaporation(q_ev=q_evap)
-
-    c_iso_2H = iso_delta.delta_to_concentration(0, '2H')
-    c_iso_18O = iso_delta.delta_to_concentration(0, '18O')
-
-    # c_iso.update_dirichlet_boundary(c_dirichlet={"2H": c_iso_2H, "18O": c_iso_18O})
+    q_evap = c_cmf.evaporation(time) * f
+    ql_surface = - q_evap * fql
+    qv_surface = - q_evap * fqv
+    c_iso.update_evaporation(q_ev=q_evap, ql_surface=ql_surface, qv_surface=qv_surface, T_surface=303.17)
 
 
-def iso_setup():
+def iso_setup(testcase):
 
+    ################## cmf ################
     P = cmf_setup()  # cmf project
     C = P.cells[0]  # current cell cmf
 
-    # setup for isotope (isotope storages)
-    atm = _atm()
-    # Iso project
+    ################# iso ##################
+    atm = _atm(testcase)
+
     p = iso_project()
     p.new_cell(atmosphere=atm, area=C.area, x=C.x, y=C.y, z=C.z)
 
     c = p.get_cells()[0]  # get current iso cell
-    _layers(c, C)  # add cmf layers to the current iso_cell
+    _layers(c, C, testcase)  # add cmf layers to the current iso_cell
 
-    #####Install connections#######
-    c.install_connections(vapor_diffusion=False, vapor_advection=False)  # install storage connections between the layers
-
-    #c.add_evaporation()
-    c.add_neuman_boundary(soil_layer=c.layers[0])
-    # c.add_dirichlet_boundary(soil_layer=c.layers[-1])
+    ########### Install connections ###########
+    c.install_connections()  # install storage connections between the layers
+    c.add_evaporation()
 
     return p, P
 
 
-def run(p, P, sim_period=50, dt=1, solutes=["2H", "18O"], **kwargs):
+def run(p, P, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1):
 
     """"
-    sim_period: days
+    simulation period: days
     dt: hours
     """
 
-    C = P.cells[0]  # current cell cmf_project
-    c = p.get_cells()[0]  # current cell of iso_project
+    print('Testcase:', testcase)
+    kwargs = iso_delta.test_case_args(testcase=testcase)
 
-    # Define solver
+    C = P.cells[0]          # current cell cmf_project
+    c = p.get_cells()[0]    # current cell of iso_project
+
+    ###################### Solver #######################
     solver = cmf.CVodeBanded(P)
     start = datetime(2024, 1, 1)
     end = start + timedelta(days=sim_period)
     timestep = timedelta(hours=dt)
+    ######################################################
 
+    delta_t = timestep.seconds  # dt * 3600  # dt.AsSeconds()
 
+    ################# variables ###########################
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
+    ev, theta, ql, qv = [], [], [], []
+    T, m_pot = [], []
+    ql_surface, qv_surface = [], []
+    ######################################################
+
     for t in solver.run(start, end, timestep):
 
         print(t)
-        print([l.theta for l in C.layers])
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         update_storages(c_iso=c, c_cmf=C), update_boundaries(c_iso=c, c_cmf=C, time=t)
         for solute in solutes:
 
-            delta_t = dt * 3600  # dt.AsSeconds()
             dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=None, **kwargs)
 
             c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
             c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to current time step
 
-    return c_iso_delta
+        ####################################################################
+        ####################################################################
+        ev.append(c.q_evap)
+        theta.append([l.theta for l in c.layers])
+        ql.append(c.liquid_fluxes), qv.append(c.vapor_fluxes)
+
+        T.append([l.T for l in c.layers])
+        m_pot.append([l.matrix_potential for l in C.layers])
+        ql_surface.append(c.ql_surface), qv_surface.append(c.qv_surface)
+        ####################################################################
+        ####################################################################
+
+    return c_iso_delta, [ev, theta, ql, qv], [T, m_pot, ql_surface, qv_surface]
 
 
 def run_testcases(test_cases):
 
+    """"
+    simulation period: days
+    dt: hours
+    """
+
     delta = {}
     for Testcase in test_cases:
-        print('Testcase:', Testcase)
-        cases = iso_delta.test_case_args(testcase=Testcase)
 
         delta[Testcase] = {}
 
-        p_iso, p_cmf = iso_setup()
-        d = run(p_iso, p_cmf, sim_period=250, dt=1, **cases)
+        P_iso, P_cmf = iso_setup(testcase=Testcase)
+        d, X, Y = run(P_iso, P_cmf, sim_period=250, dt=12, testcase=Testcase)
 
-        # delta at the end of simulation for each test cases
-        delta[Testcase]["2H"] = d["2H"][-1]
-        delta[Testcase]["18O"] = d["18O"][-1]
+        delta[Testcase]["2H"] = d["2H"]
+        delta[Testcase]["18O"] = d["18O"]
 
-    return p_iso, delta
+    return P_iso, delta, X, Y
 
 
-p_iso, delta = run_testcases(test_cases=[6])
-visualize(p_iso, delta, Isotopologue='2H')
-visualize(p_iso, delta, Isotopologue='18O')
+p_iso, delta, X, Y = run_testcases(test_cases=[1, 2, 3, 4, 5, 6])
+
+
+dz = 50  # plot layers from top
+
+# Iso_delta
+visualize(p_iso, delta, dz, Isotopologue='2H')
+visualize(p_iso, delta, dz, Isotopologue='18O')
 
 

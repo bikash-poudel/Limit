@@ -106,9 +106,9 @@ class moist_v1(object):
     ######### dt #########
     def get_dt(self):
         return self.__dt[0]
-
-    def dt(self, time):
-        return float(self.get_dt()[time])
+    @property
+    def dt(self):
+        return np.array([float(dt) for dt in self.get_dt()])  #float(self.get_dt()[time])
 
     ######### atm #########
     def get_Tatm(self):
@@ -139,20 +139,20 @@ class moist_v1(object):
     def get_qvsur(self):
         return self.__qvsur[0]
 
-    def Tsur(self, time):
+    def Ts(self, time):
         return float(self.get_Tsur()[time])
 
-    def qlsur(self, time):
+    def qls(self, time):
         return float(self.get_qlsur()[time])
 
-    def qvsur(self, time):
+    def qvs(self, time):
         return float(self.get_qvsur()[time])
 
     ######### Evap #########
     def get_qevap(self):
         return self.__qev[0]
 
-    def q_ev(self, time):
+    def qev(self, time):
         return float(self.get_qevap()[time])
 
     ######### States #########
@@ -169,7 +169,7 @@ class moist_v1(object):
     def theta(self, time):
         return [float(th) for th in self.get_theta()[time]]
 
-    def temp(self, time):
+    def T(self, time):
         return [float(t) for t in self.get_tmp()[time]]
 
     def head(self, time):
@@ -189,5 +189,5 @@ class moist_v1(object):
     def qv(self, time):
         return [float(q) for q in self.get_qv()[time]]
 
-path = r'D:\Isotope transport\soil water models\MOIST\8397416\thoritical_test\output'
-m = moist(path)
+# path = r'D:\Isotope transport\soil water models\MOIST\8397416\thoritical_test\output'
+# m = moist(path)

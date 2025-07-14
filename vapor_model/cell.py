@@ -207,7 +207,7 @@ class cell(object):
     def update_boundary_T(self, Tleft=25, Tright=25):
 
         l_left, l_right = self.layers[0], self.layers[-1]
-        l_left.T = self.Tleft
+        #l_left.T = self.Tleft
         l_right.T = self.Tright
 
     def update_evaporation(self, qevap):

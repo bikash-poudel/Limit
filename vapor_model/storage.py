@@ -142,7 +142,6 @@ class soil_layer(flux_node):
         self.thickness = lower_boundary - upper_boundary
         self.theta_sat = theta_sat
         self.tortuosity = tortuosity
-        self.rH = rH
         self.T0 = T0
 
         # Soil Properties
@@ -375,7 +374,7 @@ class soil_layer(flux_node):
         omega = abs((self.theta_sat - self.theta) ** (2 / 3))
         theta_a = self.theta_sat - self.theta
 
-        rho_s = 1.0e-6 * exp(19.84 - 4975.9 / Tt)  # g m-3
+        rho_s = 1.0e-6 * exp(19.84 - 4975.9 / Tt)  # g cm-3
         HR = exp(2.1238e-4 * self.head / Tt)
         pHRph = HR * 2.1238e-4 / Tt  # cm-1
 
@@ -579,6 +578,32 @@ class soil_layer(flux_node):
             return self.phi
         else:
             raise NotImplementedError
+
+    @property
+    def relative_humidity(self):
+        """
+        Calculates the relative humidity in the soil air space based on the temperature and the matrix potential (Psi)
+
+        @param psi: Matrix potential of the soil layer
+        @type psi: float
+
+        @param T: Temperature of the soil layer in kelvin
+        @type T: float
+        """
+        # SLI_utils: L1409
+
+        Mw = 0.018015999346971512  # molecular wt: water    (kg/mol)
+        gravity = 9.8000001907348633  # gravity acceleration (m/s2)
+        R = 8.3142995834350586  # gas constant(J/(mol*K))
+        rhmin = 5.0000000745058060E-002  # min relative humidity SLI_utils:L1409
+
+        if self.S < 1:
+            hr = max(exp(Mw * gravity * self.head / (R * self.T)), rhmin)
+        else:
+            hr = 1
+
+        return hr
+
 
     """Functions"""
 

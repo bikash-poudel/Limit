@@ -367,9 +367,8 @@ class liquid_diffusion(flux_connection, liquid_diffusion_base_class):
         thickness_left_node = self.left_node.thickness  # thickness in m
         thickness_right_node = self.right_node.thickness  # thickness in m
 
-        delta_z = self.left_node.center.distance(
-            to_Point=self.right_node.center)  # distance between left and right node in cm
-        # delta_z = self.right_node.center - self.left_node.center
+        # distance between left and right node in m
+        delta_z = self.left_node.center.distance(to_Point=self.right_node.center)
 
         dl_mean = ((dli_eff_sli_leftnode * thickness_left_node + dli_eff_sli_rightnode * thickness_right_node) / (
                 thickness_right_node + thickness_left_node)) / delta_z
@@ -727,7 +726,8 @@ class liquid_advection(flux_connection):
         For vapor flux --> vapor flux * alpha(i)
         For liquid flux --> liquid flux
         """
-        return self.get_flux() * 0.5  # sli_solve:L2432, dcqldca & dcqldcb = 0.5
+
+        return self.get_flux() * 0.5 # sli_solve:L2432, dcqldca & dcqldcb = 0.5
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
         return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
@@ -903,6 +903,7 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
         return flux_i
 
 
+
 class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffusion_base_class):
     """
     Description
@@ -919,9 +920,8 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
                  q_Evap=0.0,
                  # evaporative flux from soil or litter surface to atmosphere (kg/(m2*day)) -> should be a negative number flowing from UpperSoilLayer to Atmosphere
                  T_surface=273.0,  # soil surface (interface atmosphere / soil) temparature in Kelvin
-                 q_l=0.0,
-                 # liquid flux between the topsoil layer and the atmosphere (m/day) - including precipitation ->in case of percepitation it should be a positive number flowing from Atmosphere to UpperSoilLayer
-                 q_v=0.0,  # vapour flux into the soil
+                 q_l=0.0, # liquid flux between the topsoil layer and the atmosphere (m/day) - including precipitation ->in case of percepitation it should be a positive number flowing from Atmosphere to UpperSoilLayer
+                 q_v=0.0, # vapour flux into the soil
                  hydrodynamic_dispersivity=0.0):  # hydrodynamic_dispersivity for liquide diffusion will be ignored when set to 0.0
 
         """
@@ -1020,6 +1020,18 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         q_in = self.atmosphere.cv_a / (ram + rbh)
 
         return q_in
+    def get_evap_influx(self):
+
+        """Evaporation flux entering soil"""
+
+        # sli_main.f90: L359 / rbh in sli_solve.f90:L2391
+
+        ram = self.ram(self.atmosphere.wind_speed, self.atmosphere.hc, self.atmosphere.d0, self.atmosphere.z0m)
+        rbh = self.rbh(self.atmosphere.wind_speed, self.atmosphere.extku, self.atmosphere.LAI)
+
+        q_in = self.atmosphere.cv_a / (ram + rbh)
+
+        return q_in
 
     q_evaporation_in = property(get_evap_influx, None, None, "Evaporation flux entering soil")
 
@@ -1063,7 +1075,11 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+        #nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+
+        nk = self.nK_MathieuBariac(theta_surface=self.top_layer.theta,
+                                   theta_surface_sat=self.top_layer.theta_sat,
+                                   theta_surface_0=self.top_layer.theta_0)
 
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation=formulation_alpha_i_k, **kwargs)
@@ -1119,7 +1135,11 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+        # nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+
+        nk = self.nK_MathieuBariac(theta_surface=self.top_layer.theta,
+                                   theta_surface_sat=self.top_layer.theta_sat,
+                                   theta_surface_0=self.top_layer.theta_0)
 
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation="MathieuBariac", **kwargs)
@@ -1159,7 +1179,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         delta_ciso = alpha_i_k * alphai_surface
         d_evapout_ciso = delta_ciso * (dvi_top_layer / (0.5 * self.top_layer.thickness)
                                        * self.top_layer.cv * alphai_top_layer
-                                       - self.ql + dl / (0.5 * self.top_layer.thickness)) / den
+                                       - self.ql * w1 + dl / (0.5 * self.top_layer.thickness)) / den
 
         return d_evapout_ciso
 

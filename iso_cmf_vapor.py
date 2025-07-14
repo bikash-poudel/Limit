@@ -42,7 +42,7 @@ class cmf_iso(object):
             r_curve = cmf.VanGenuchtenMualem(Ksat=Braud_Ksat, phi=Braud_phi, alpha=0.005, n=Braud_n,
                                              theta_r=Braud_theta_r)
             # Oversaturation tolerence upto 1% for matrix pot = +1
-            r_curve.w0 = 0.9995  # 0.9995  # See: https://philippkraft.github.io/cmf/cmf_tut_retentioncurve.html Oversaturation
+            r_curve.w0 = 0.9995  # See: https://philippkraft.github.io/cmf/cmf_tut_retentioncurve.html Oversaturation
             r_curve.l = 0.67  # tortuosity
             r_curve.K = r_curve.Ksat * pow(r_curve.w0, Braud_eta)
 
@@ -110,7 +110,9 @@ class cmf_iso(object):
             for lcm, lv in zip(lcmf, lvp):
 
                 if not lv.theta >= lv.theta_sat:
+
                     lcm.theta = lv.theta
+
         else:
             return ValueError("Length of layers and _theta mismatch.")
 
@@ -131,7 +133,7 @@ class vapor_iso(object):
             dt = initial_dt
             # print('T: ', T)
             initial_dt = self.project.run(dt=dt, dt_max=60, epsilon=1e-4, model=model,
-                                          water_flux=False, heat_flux=True, vapor_flux=True)
+                                          water_flux=False, heat_flux=True, vapor_flux=False)
 
     @property
     def project(self):
@@ -202,12 +204,12 @@ class vapor_iso(object):
         self._layers(c)  # add layers
 
         #####Install connections#######
-        c.install_connections(water=False, heat=True, vapor=True)
+        c.install_connections(water=False, heat=True, vapor=False)
         c.add_evaporation(top_layer=c.layers[0])
 
         # boundaries
         c.hleft, c.hright = c.layers[0].head, c.layers[-1].head
-        c.Tleft, c.Tright = c.layers[0].T, c.layers[-1].T
+        c.Tleft, c.Tright = 30, c.layers[-1].T
 
     def update_theta(self, c_cmf, c_vapor):
 
@@ -320,7 +322,7 @@ class isotope(object):
                                                     theta_sat=lv.theta_sat,
                                                     tortuosity=lv.tortuosity,
                                                     T=lv.T + Tzero_sli,
-                                                    rH=lv.rH,
+                                                    rH=0.9,
                                                     psi=lc.potential
                                                     )
 
@@ -344,10 +346,10 @@ class isotope(object):
         l_cmf, l_vap = self.c_cmf.layers, self.c_vapor.layers
 
         # Update layers
-        theta = [l.theta for l in l_vap]
+        theta = [l.theta for l in l_cmf]
         T_soil = [l.T + Tzero_sli for l in l_vap]
         rH = None
-        psi = [l.head / 100 for l in l_vap]
+        psi = [l.potential / 100 for l in l_cmf]
 
         self.c_iso.update_layers(theta=theta, T=T_soil, rH=rH, psi=psi)
         # self.c_iso.update_aquifer(c_iso={"2H": 0.0, "18O": 0.0})
@@ -363,23 +365,39 @@ class isotope(object):
         # Surface variables
         T_surface = self.c_vapor.layers[0].T + Tzero_sli
         q_ev = self.c_cmf.evaporation(t) / 1000 / 86400  # mm day into m s-1
-        ql_surface = -q_ev
-        qv_surface = 0
+        qv_surface = 0 #-self.c_vapor.connection_evap.q_vapor / 100  # cm s-1 to m s-1
+        ql_surface = - q_ev
         self.c_iso.update_evaporation(q_ev=q_ev, T_surface=T_surface, ql_surface=ql_surface, qv_surface=qv_surface)
 
         # soil fluxes also ignores the flux from top layer / right layer to the boundary layer
         l_fluxes = [l1.flux_to(l2, t) for l1, l2 in zip(self.c_cmf.layers[:-1], self.c_cmf.layers[1:])]
         ql = np.array(l_fluxes) / 86400000  # m3 day-1 into ms-1
-        qv = np.array(self.c_vapor.vapor_fluxes) / 100  # cm s-1 to m s-1
+        qv = 0#np.array(self.c_vapor.vapor_fluxes) / 100  # cm s-1 to m s-1
         ql, qv = np.append(ql, 0.0), np.append(qv, 0.0)
 
         self.c_iso.update_liquid_fluxes(liquid_fluxes=ql)
-        self.c_iso.update_vapor_fluxes(vapor_fluxes=qv)  # None if qv is computed internally, else list of qv, len = len(layers)
+        self.c_iso.update_vapor_fluxes(vapor_fluxes=None)  # None if qv is computed internally, else list of qv, len = len(layers)
+
+
+def vapor_update_run(ccmf, cvapor, vap, t, timestep):
+
+    f = 1 / 8600 / 1000  # factor to convert [mm day-1] (m3 day-1) to [ms-1]
+
+    # run vapor model
+    _vapor.update_evap(cvapor, qev=ccmf.evaporation(t) * f * 100)  # since q in vapor model is in cm s-1
+    _vapor.update_theta(c_cmf=ccmf, c_vapor=cvapor)  # update vapor with new theta
+    _vapor.run(initial_dt=60, simulation_time=timestep.seconds)
+    #qv = np.array(cvapor.vapor_fluxes) * 10 * 86400  # cms-1 to mm day-1
+    #qvs = -cvapor.connection_evap.q_vapor * 864000  # cms-1 to mm day-1
+    #qv_layers = np.concatenate(([qvs - qv[0]], qv[:-1] - qv[1:], [qv[-1]]))
+    #vap.flux = np.append(qv, 0) * 100  # / (ccmf.area * np.array([l.thickness for l in ccmf.layers])) * 10000
+
+    # return qv
 
 
 ########### cmf #############
 _cmf = cmf_iso(r_curve='VGM')
-L_boundaries = np.arange(0.1, 1.1, 0.01)
+L_boundaries = np.arange(0.05, 1.05, 0.05)
 pcmf = _cmf.cmf_setup(l_boundaries=L_boundaries)  # cmf project
 ccmf = pcmf.cells[0]  # cmf cell
 _cmf.cmf_boundary(c=ccmf)  # 1.005 * 10 ** - 5 kg m-2 s-1 to mm day-1
@@ -389,6 +407,9 @@ _vapor = vapor_iso(cell_cmf=ccmf)
 _vapor.soil_vapor_setup()  # vapor module
 pvapor = _vapor.project  # vapor project
 cvapor = pvapor.cells[0]  # vapor cell
+
+_v = vp.cmf_vapor_interface  # interface module to add vapor fluxes to cmf
+vap = _v.Vaporizer(ccmf)
 
 ######### iso ###########
 piso = iso_project()
@@ -402,55 +423,64 @@ start = datetime.datetime(2024, 1, 1)
 end = start + timedelta(days=250)
 timestep = timedelta(hours=1)
 
+# run vapor model
+qv = vapor_update_run(ccmf, cvapor, vap, t=start, timestep=timestep)
+
 ev_act, trp_act = [], []
 q_liquid, q_vapor = [], []
-theta = []
+theta, T = [], []
+delta = []
 count = 1
 f = 1 / 8600 / 1000  # factor to convert [mm day-1] (m3 day-1) to [ms-1]
 for t in solver.run(start, end, timestep):
+
     print(count, ' ', t)
-
-    qev, trp = ccmf.evaporation(t), ccmf.transpiration(t)
-    ql = [l.flux_to(next_l, t) for l, next_l in zip(ccmf.layers[:-1], ccmf.layers[1:])]  # downward flux
-
-    # run vapor model
-    _vapor.update_evap(cvapor, qev=qev * f * 100)  # since q in vapor model is in cm s-1
-    _vapor.update_theta(c_cmf=ccmf, c_vapor=cvapor)  # update vapor with new theta
-    _vapor.run(initial_dt=60, simulation_time=timestep.seconds)
-    qv = np.array(cvapor.vapor_fluxes) * 10 * 86400  # cms-1 to mm day-1
-    
-    # update cmf with new theta
-    _cmf.update_theta(c_cmf=ccmf, c_vapor=cvapor)
 
     # update and run iso
     _iso.update_iso_storages(), _iso.update_iso_boundaries(t)
     _iso.run_iso(solutes=["2H"], dt=timestep.seconds)
 
-    #print(ciso.conc_2H_delta)
+    print(ciso.conc_2H_delta)
 
-    theta.append(ccmf.layers.theta)
+    # run vapor model
+    qv = vapor_update_run(ccmf, cvapor, vap, t, timestep=timestep)
+
+    temp = [l.T for l in cvapor.layers]
+    theta = [l.theta for l in ccmf.layers]
+    print(temp)
+    print(theta)
+
+    qev, trp = ccmf.evaporation(t), ccmf.transpiration(t)
+    ql = [l.flux_to(next_l, t) for l, next_l in zip(ccmf.layers[:-1], ccmf.layers[1:])]  # downward flux
+
+    theta.append(ccmf.layers.theta), T.append(temp)
     ev_act.append(qev), trp_act.append(trp)
     q_liquid.append(ql), q_vapor.append(qv)
+
+    delta.append(ciso.conc_2H_delta)
 
     count += 1
 
 plot(ev_act, label='evap')
-# plot(trp_act, label='trp')
-# plot(np.array(ev_act) + np.array(tr_act), label='qev + qtr')
+plot(trp_act, label='trp')
+plot(np.array(ev_act) + np.array(trp_act), label='qev + qtr')
 xlabel(r'$time [h]$')
 ylabel(r'flux $[mm/day]$')
 legend()
 grid()
 show()
 
-plot(theta[-1], -np.arange(0, len(theta[-1])))
+th = [l.theta for l in ccmf.layers]
+plot(th, -np.arange(0, len(th)))
 xlabel(r'Soil moisture $\theta [m^3/m^3]$')
 ylabel(r'$depth [cm]$')
 grid()
 show()
 
-plot(q_liquid[-1], -np.arange(0, len(q_liquid[-1])), label='ql')
-#plot(q_vapor[-1], -np.arange(0, len(q_vapor[-1])), label='qv')
+ql = [l.flux_to(next_l, end) for l, next_l in zip(ccmf.layers[:-1], ccmf.layers[1:])]
+qv = cvapor.vapor_fluxes
+plot(ql, -np.arange(0, len(ql)), label='ql')
+plot(qv, -np.arange(0, len(qv)), label='qv')
 xlabel(r'moisture flux $[mm/day]$')
 ylabel(r'$depth [cm]$')
 legend()

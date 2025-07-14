@@ -284,7 +284,7 @@ class iso_cell(object):
     @property
     def connections_l_diff(self):
         """
-        @return: Returns the flux connection related to liquid diffusion.
+        @return: Returns the flux connection related to uid diffusion.
 
         """
         return self.__connection_l_diff
@@ -417,6 +417,7 @@ class iso_cell(object):
             raise NotImplementedError
 
     """Functions"""
+
     def get_conc_layers(self, Isotopologue):
 
         """"List of Isotope concentration in layers """
@@ -650,6 +651,7 @@ class iso_cell(object):
         """
         updates the  states to current time step.
         """
+
         try:
             if rH is None:
                 rH = [None] * len(self.__layers)
@@ -761,12 +763,15 @@ class iso_cell(object):
                     raise ValueError("Number of vapor fluxes must be equal to the flux connections")
 
             else:
-                q = vapor_flux.vapor_flux()
+
                 q_v = []
                 for i, c_v_adv in enumerate(self.connections_v_adv):
-                    qv = q.q_vapor(left_node=c_v_adv.left_node, right_node=c_v_adv.right_node)
-                    c_v_adv.q_v = qv
+                    q = vapor_flux.vapor_flux(left_node=c_v_adv.left_node,
+                                              right_node=c_v_adv.right_node,
+                                              top_layer=self.top_layer)
 
+                    qv = q.qvapor()
+                    c_v_adv.q_v = qv
                     q_v.append(qv)
 
                 self.__vapor_fluxes = q_v
@@ -774,7 +779,7 @@ class iso_cell(object):
         except ValueError:
             raise NotImplementedError
 
-    def update_evaporation(self, q_ev=0.0, T_surface=273.0, ql_surface=0.0, qv_surface=0.0):
+    def update_evaporation(self, q_ev=0.0, ql_surface=0.0, qv_surface=0.0, T_surface=273.0):
         """
         Updates the flux related to iso - evaporation to current time step
 
@@ -917,6 +922,3 @@ class iso_cell(object):
 
         except ValueError:
             raise NotImplementedError("A required value was not provided.")
-
-
-

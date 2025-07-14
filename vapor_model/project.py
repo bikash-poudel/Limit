@@ -52,7 +52,7 @@ class project(object):
                 self.water_equation(delta_t=dt, epsilon=epsilon)
 
             if heat_flux:
-                self.heat_equation(delta_t=dt, epsilon=epsilon)
+                dt = self.heat_equation(delta_t=dt, epsilon=epsilon)
 
             if vapor_flux:
                 dt = self.vapor_equation(delta_t=dt, dt_max=dt_max, epsilon=epsilon)
@@ -100,7 +100,7 @@ class project(object):
 
     def heat_equation(self, delta_t, epsilon=1e-4):
 
-        # self.cells[0].update_boundary_T()
+        #self.cells[0].update_boundary_T()
         tempt = self.solve(delta_t, equation='h')
 
         heat_fail = 1
@@ -109,7 +109,7 @@ class project(object):
             p += 1
             temp = tempt
             self.cells[0].update_temperature(temp)
-            # self.cells[0].update_boundary_T()
+            #self.cells[0].update_boundary_T()
 
             tempt = self.solve(delta_t=delta_t, equation='h')
             self.cells[0].update_temperature(tempt)
@@ -121,6 +121,8 @@ class project(object):
 
             if p == 5:
                 delta_t, heat_fail = delta_t / 2, 1
+
+            return delta_t
 
     def vapor_equation(self, delta_t, dt_max, epsilon=1e-4):
 
@@ -144,8 +146,8 @@ class project(object):
             temps = 0.5 * (tempss + tempt)
 
             self.cells[0].update_head(heads), self.cells[0].update_temperature(temps)
-            self.cells[0].update_boundary_head()
-            self.cells[0].update_boundary_T()
+            #self.cells[0].update_boundary_head()
+            #self.cells[0].update_boundary_T()
 
             head, temp = self.solve(delta_t=delta_t, equation='v')
 
@@ -207,6 +209,8 @@ class project(object):
 
     def water_flux_matrix(self, mat_A, mat_B, storages, dt):
 
+        s_indices = {node: idx for idx, node in enumerate(storages)}  # Precompute indices
+
         try:
             c_evap = self.cells[0].connection_evap
             # check which storage node is connected to boundary
@@ -226,8 +230,8 @@ class project(object):
 
                 if isinstance(c, fluxes.water_flux):
 
-                    index_l = storages.index(c.left_node)  # index of left storage node
-                    index_r = storages.index(c.right_node)  # index of right storage node
+                    index_l = s_indices[c.left_node]  # index of left storage node
+                    index_r = s_indices[c.right_node]  # index of right storage node
 
                     r = self.r(c, dt)
                     hy_cond_pot, q_tmp_water = c.hy_conduct_potential() * r, c.q_tmp_water() * r
@@ -260,13 +264,14 @@ class project(object):
 
     def heat_flux_matrix(self, mat_A, mat_B, storages, dt):
 
+        s_indices = {node: idx for idx, node in enumerate(storages)}  # Precompute indices
+
         try:
-            node_indices = {node: idx for idx, node in enumerate(storages)}
 
             for c in self.cells[0].heat_connections:
 
-                index_l = node_indices[c.left_node]  # Index of left storage node
-                index_r = node_indices[c.right_node]  # Index of right storage node
+                index_l = s_indices[c.left_node]  # Index of left storage node
+                index_r = s_indices[c.right_node]  # Index of right storage node
 
                 r = self.r(c, dt)
                 th_con, th_con_pot = c.th_conductivity() * r, c.th_hy_conductivity_T0() * r
@@ -274,7 +279,7 @@ class project(object):
                 if not index_l == 0:  # if left node is the boundary  storages(layer)
                     mat_A[index_l, index_r] -= th_con
 
-                if index_r != len(storages) - 1: # not c.right_node == storages[-1]:  # if right node is not the boundary layer (storage)
+                if not c.right_node == storages[-1]:  # if right node is not the boundary layer (storage)
                     mat_A[index_r, index_l] -= th_con
 
                 mat_A[index_l, index_l] += th_con
@@ -315,7 +320,7 @@ class project(object):
 
             h, T = [], []
             # left boundary
-            qv_right, qv_left = q_vapor[0], 0
+            qv_right, qv_left = q_vapor[0],0
 
             if qv_right > 0:
                 qv_latent_right = qv_latent[1] * qv_right
@@ -324,7 +329,7 @@ class project(object):
             else:
                 qv_latent_right = 0
 
-            qv_latent_left = 0
+            qv_latent_left = qv_latent[0] * qv_left
 
             B = np.array([qv_right - qv_left, qv_latent_right - qv_latent_left])
             A = np.array([[storages[0].H1, storages[0].H2], [storages[0].T2, storages[0].T1]])

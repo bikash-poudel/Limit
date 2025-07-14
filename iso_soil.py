@@ -39,7 +39,7 @@ class soil_iso(object):
 
     """"Functions"""
 
-    def run_soil(self, model='proposed', initial_dt=60, simulation_time=86400 * 250, epsilon=1e-4,
+    def run_soil(self, model='coupled', initial_dt=60, simulation_time=86400 * 250, epsilon=1e-4,
                  run_iso=True, solutes=["2H", "18O"]):
 
         count = 0
@@ -49,8 +49,8 @@ class soil_iso(object):
             count += 1
 
             print(count, ' ', 'dt: ', initial_dt, 's ', T / 86400, ': days')
-            print(self.c_iso.conc_2H_delta)
-            print([l.theta for l in self.c_soil.layers])
+            #print(self.c_iso.conc_2H_delta)
+            #print([l.theta for l in self.c_soil.layers])
 
             T += initial_dt
             dt = initial_dt
@@ -157,9 +157,9 @@ class soil_iso(object):
               0.29499995708465576, 0.35199999809265137, 0.42100000381469727, 0.500999927520752,
               0.5980000495910645, 0.7140002250671387, 0.8509998321533203]
 
-        lower_boundaries = np.cumsum(dx)*100
+        #lower_boundaries = np.cumsum(dx)*100
 
-        # lower_boundaries = np.arange(0.5, 50.5, 0.5)
+        lower_boundaries = np.arange(0.5, 50.5, 0.5)
         #lower_boundaries = np.insert(depth, 0, 0.05)
 
         theta_init, tmp_ini = 0.35, 30
@@ -169,8 +169,8 @@ class soil_iso(object):
         for lower_boundary in lower_boundaries:
             new_layer = storage.soil_layer(upper_boundary=upper_boundary,
                                            lower_boundary=lower_boundary,
-                                           theta=0.35, #0.35,  # 0.2
-                                           theta_sat=0.35,  # 0.547,
+                                           theta=0.5, #0.35,  # 0.2
+                                           theta_sat=0.5,  # 0.547,
                                            tortuosity=0.67,
                                            rH=0.2,
                                            head=-19.3,
@@ -289,7 +289,7 @@ s = soil_iso(soil_project=project(),
              iso_testcase=1)
 
 s.iso_soil_setup()
-s.run_soil(model='coupled', simulation_time=86400 * 250, run_iso=False, solutes=['2H'])
+s.run_soil(model='proposed', simulation_time=86400 * 250, run_iso=False, solutes=['2H'])
 
 s_layers, i_layers = s.c_soil.layers, s.c_iso.layers
 depth = [-l.center.z for l in i_layers]

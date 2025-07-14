@@ -403,8 +403,17 @@ class iso_storage(flux_node):
                  T=283.15,  # temperature current time [Kelvin]
                  rH=0,  # soil relative humidity
                  psi_0=None,  # soil matric potential at previous time
-                 psi=None  # matric potential at current time
+                 psi=None,  # matric potential at current time
+
+                 eta=9.1400003433227539,
+                 lamda=0.22,
+                 ksat=1.23e-7,  # m-s
+                 he=-0.193,
+                 css=850,
+                 rho=1400,
+                 clay=0.5
                  ):
+
         """
         Constructor of iso_storage
         """
@@ -425,6 +434,15 @@ class iso_storage(flux_node):
         self.psi_0 = psi_0
         self.psi = psi
         self.pond = None
+
+        self.eta = eta
+        self.lamda = lamda
+        self.ksat = ksat
+        self.he = he
+        self.phie = self.ksat * self.he / (1 - self.lamda * self.eta)
+        self.css = css
+        self.rho = rho
+        self.clay = clay
 
     """Properties"""
 
@@ -790,9 +808,9 @@ class iso_soil_layer(iso_storage):
                  # cell,  # as iso_cell
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                  # Dict with solutes and initial concentrations in kg/m**3 (!!NO delta signature!!) (currently supported "2H" and/or "18O")
-                 theta_t0=0.3, # volumetric water content m3/m3 at previous time
+                 theta_t0=0.35, # volumetric water content m3/m3 at previous time
                  theta=0.3,  # volumetric water content m3/m3 at current time
-                 theta_0=0.0,  # volumetric water content m3/m3 at high suctions
+                 theta_0=0.01,  # volumetric water content m3/m3 at high suctions
                  theta_sat=0.35,  # volumetric water content m3/m3 at saturation, or porosity of the soil m3/m3
                  tortuosity=0.67,  # tortuosity of the soil m/m
                  T0 = 283.15,  # temperature at previous time step

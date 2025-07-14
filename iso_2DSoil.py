@@ -72,9 +72,9 @@ def _atm(testcase):
 def _layers(c, testcase):
 
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
-    lower_boundaries = np.cumsum([2.5]*20)
+    lower_boundaries = np.cumsum([0.05]*100)
     nx = len(lower_boundaries)
-    theta, theta_r, theta_sat, tortuosity, T_soil = [0.2] * nx, [0.05] * nx, [0.547] * nx, [0.67] * nx, [25] * nx
+    theta, theta_r, theta_sat, tortuosity, T_soil = [0.5] * nx, [0.05] * nx, [0.547] * nx, [0.67] * nx, [25] * nx
     # rH = sli.R_humidity(dt)
     #psi = sli.matric_pot(dt)
 

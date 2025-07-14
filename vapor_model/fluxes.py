@@ -89,7 +89,7 @@ class heat_flux(flux_connection):
 
     def th_conductivity_pot(self):
 
-        return self.hy_conduct_potential() * (self.right_node.head - self.left_node.head)
+        return self.hy_conduct_potential() * (self.left_node.head - self.right_node.head)
 
     def th_hy_conductivity_correction(self):
 
@@ -106,7 +106,7 @@ class heat_flux(flux_connection):
 
     def q_cond(self):
 
-        return self.th_conductivity() * (self.right_node.T - self.left_node.T)
+        return self.th_conductivity() * (self.left_node.head - self.right_node.head)
 
 
 class vapor_flux(flux_connection):
@@ -124,11 +124,11 @@ class vapor_flux(flux_connection):
 
     def q_vapor_pot(self):
 
-        return self.v_cond_pot() * (self.right_node.head - self.left_node.head)
+        return self.v_cond_pot() * (self.left_node.head - self.right_node.head)
 
     def q_vapor_tmp(self):
 
-        return self.v_cond_temp() * (self.right_node.T - self.left_node.T)
+        return self.v_cond_temp() * (self.left_node.T - self.right_node.T)
 
     def q_vapor(self):
 
@@ -149,6 +149,8 @@ class evaporation(flux_connection):
 
         flux_connection.__init__(self, atmosphere, soil_layer)
         self.__q_evap = q
+        self.soil_layer = soil_layer
+        self.atmosphere = atmosphere
 
     @property
     def q_evap(self):
@@ -158,6 +160,17 @@ class evaporation(flux_connection):
     @q_evap.setter
     def q_evap(self, qevap):
         self.__q_evap = qevap
+
+    @property
+    def q_vapor(self):
+        """Vapor evaporation driven by vapor pressure gradients"""
+        Dmv = self.soil_layer.Dmv  # Vapor diffusivity [cm²/s]
+        Dtv = self.soil_layer.Dtv  # Vapor diffusivity [cm²/s]
+        D = Dmv + Dtv
+        RH_soil = self.soil_layer.relative_humidity  # Relative humidity in soil
+        RH_atm = self.atmosphere.Rh  # Atmospheric relative humidity
+        return D * (RH_soil - RH_atm) / self.soil_layer.thickness
+
 
     def ev_potential(self):
 
@@ -181,4 +194,20 @@ class evaporation(flux_connection):
         slope_esat = esat * esatb * esatc/(self.right_node.T + esatc) ** 2
         ea = esata * exp(esatb * self.left_node.T * (self.left_node.T + esatc))
         Da = ea / self.left_node.Rh - ea
+
+
+class VaporEvaporation(flux_connection):
+    def __init__(self, atmosphere, soil_layer):
+        super().__init__(atmosphere, soil_layer)
+        self.__q_vapor = 0  # Vapor flux component
+
+    @property
+    def q_vapor(self):
+        """Vapor evaporation driven by vapor pressure gradients"""
+        Dmv = self.soil_layer.Dmv  # Vapor diffusivity [cm²/s]
+        Dtv = self.soil_layer.Dtv  # Vapor diffusivity [cm²/s]
+        D = Dmv + Dtv
+        RH_soil = self.soil_layer.relative_humidity  # Relative humidity in soil
+        RH_atm = self.atmosphere.Rh  # Atmospheric relative humidity
+        return D * (RH_soil - RH_atm) / self.soil_layer.thickness
 

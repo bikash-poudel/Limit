@@ -1,4 +1,6 @@
 
+import numpy as np
+
 
 class SlI:
 
@@ -131,13 +133,13 @@ class SlI:
     def in_fluxes(self, time):
         return self.get_in_fluxes()[time]
 
-    def qsig(self, time):
+    def q(self, time):
         return [float(flux) for flux in self.in_fluxes(time)[0:20]]
 
-    def qlsig(self, time):
+    def ql(self, time):
         return [float(flux) for flux in self.in_fluxes(time)[20:40]]
 
-    def qvsig(self, time):
+    def qv(self, time):
         return [float(flux) for flux in self.in_fluxes(time)[40:60]]
 
     def qprec(self, time):
@@ -154,6 +156,87 @@ class SlI:
 
     def qd(self, time):
         return float(self.in_fluxes(time)[82])
+
+    def qya(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[83:103]]
+
+    def qyb(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[103:123]]
+
+    def qTa(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[123:143]]
+
+    def qTb(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[143:163]]
+
+    def qvya(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[163:183]]
+
+    def qvyb(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[183:203]]
+
+    def qvTa(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[203:223]]
+
+    def qvTb(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[223:243]]
+
+    def dy(self, time):
+        return [float(flux) for flux in self.in_fluxes(time)[243:263]]
+
+    def qsig(self, time):
+
+        q = np.array(self.q(time))
+
+        dy = np.array(self.dy(time))
+        qya = np.array(self.qya(time))
+        qyb = np.array(self.qyb(time))
+        qTa = np.array(self.qTa(time))
+        qTb = np.array(self.qTb(time))
+        dT = np.array(self.deltaT(time))
+
+        qsig = q[1:-1] + (qya[1:-1] * dy[1:-1] + qyb[1:-1] * dy[2:] + qTa[1:-1] * dT[1:-1] + qTb[1:-1] * dT[2:])
+        q0 = q[0] + (qya[0] * dy[0] + qyb[0] * dy[1] + qTa[0] * dT[0] + qTb[0] * dT[1])
+        qn = q[-1] + (qya[-1] * dy[-1] + qTa[-1] * dT[-1])
+
+        return np.concatenate(([q0], qsig, [qn]))
+
+    def qvsig(self, time):
+
+        qv = np.array(self.qv(time))
+
+        dy = np.array(self.dy(time))
+        qvya = np.array(self.qvya(time))
+        qvyb = np.array(self.qvyb(time))
+        qvTa = np.array(self.qvTa(time))
+        qvTb = np.array(self.qvTb(time))
+        dT = np.array(self.deltaT(time))
+
+        qvsig = qv[1:-1] + (qvya[1:-1] * dy[1:-1] + qvyb[1:-1] * dy[2:] + qvTa[1:-1] * dT[1:-1] + qvTb[1:-1] * dT[2:])
+        qv0 = qv[0] + (qvyb[0] * dy[1] + qvTb[0] * dT[1])
+        qvn = 0
+
+        return np.concatenate(([qv0], qvsig, [qvn]))
+
+    def qlsig(self, time):
+
+        qlsig = self.qsig(time)[1:-1] - self.qvsig(time)[1:-1]
+        qln = self.qsig(time)[-1]
+
+        return np.concatenate((qlsig, [qln]))
+
+    def qevapsig(self, time):
+
+        qev = self.qevap(time)
+        qyb = self.qyb(time)[0]
+        qTb = self.qTb(time)[0]
+
+        dy = self.dy(time)[1]
+        dT = self.deltaT(time)[1]
+
+        return qev - (qyb * dy + qTb * dT)
+
+
 
     ###### in parameter ######
     def get_in_parameter(self):
