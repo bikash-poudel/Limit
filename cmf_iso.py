@@ -495,6 +495,7 @@ delta_2H_6, delta_18O_6 = delta[1]['2H'], delta[1]['18O']
 
 dz = 10
 
+"""
 # Iso_delta
 visualize(p_iso, delta, dz, Isotopologue='2H')
 visualize(p_iso, delta, dz, Isotopologue='18O')
@@ -507,7 +508,6 @@ depth = [-l.center.z for l in p_iso.get_cells()[0].layers][:dz]
 days = [50, 100, 150, 200, 250]
 t_step = [(d * 2)-1 for d in days]
 time = np.arange(0.5, 250.5, 0.5)
-
 
 ###################### Iso ######################
 ############ delta profile ##################
@@ -545,7 +545,7 @@ _ql = [ql[t] for t in t_step]
 _qv = [qv[t] for t in t_step]
 
 
-""""
+
 ############ ql profile ##########
 for q_l, l in zip(_ql, days):
     plt.plot(np.array(q_l[:dz]) * f, depth, label=str(l) + ' days')
@@ -569,7 +569,7 @@ plt.legend()
 plt.grid()
 plt.show()
 
-"""
+
 ############ coupled profile #####################
 plt.plot(np.array(_ql[-1][:dz]) * f, depth, label='ql')
 plt.plot(np.array(_qv[-1][:dz]) * f, depth, label='qv')
@@ -581,7 +581,7 @@ plt.legend()
 plt.grid()
 plt.show()
 
-""""
+
 ############### potential profile ######################
 _potential = [pot[t] for t in t_step]
 
@@ -607,7 +607,7 @@ plt.ylabel('[mm per day]')
 plt.grid()
 plt.legend()
 plt.show()
-"""
+
 ############ surface fluxes ########################
 plt.plot(time, np.array(ev) * f, label='evaporatiom')
 plt.plot(time, np.array(ql0) * f, label='ql0')
@@ -620,7 +620,7 @@ plt.legend()
 plt.show()
 
 
-"""
+
 ########## temporatl theta ###################
 th1 = [t[0] for t in theta]
 th2 = [t[1] for t in theta]
@@ -800,7 +800,6 @@ plt.yscale('log')
 plt.grid()
 plt.legend()
 plt.show()
-
 
 """
 

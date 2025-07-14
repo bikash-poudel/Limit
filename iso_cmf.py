@@ -23,6 +23,7 @@ def visualize(p, delta, dz, Isotopologue='2H'):
 
 
 def _theta(psi):
+
     alpha = 1/19.3
     n = 2.22
     m = 0.099
@@ -172,11 +173,11 @@ def update_storages(c_iso, c_cmf):
 
     # Update layers
 
-    # theta = [min(l.theta, l.porosity) for l in c_cmf.layers] # theta from cmf.
+    theta = [min(l.theta, l.porosity) for l in c_cmf.layers]  # theta from cmf.
     T_soil = [303.17] * len(c_cmf.layers)
     rH = [None] * len(c_cmf.layers)
     psi = [min(l.matrix_potential, 0) for l in c_cmf.layers]
-    theta = [_theta(-p) for p in psi]   # theta from matrix potential
+    # theta = [_theta(-p) for p in psi]   # theta from matrix potential
 
     c_iso.update_layers(theta=theta, T=T_soil, rH=rH, psi=psi)
 
@@ -259,7 +260,7 @@ def run(p, P, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1):
     timestep = timedelta(hours=dt)
     ######################################################
 
-    delta_t = timestep.seconds  # dt * 3600  # dt.AsSeconds()
+    delta_t = timestep.seconds
 
     ################# variables ###########################
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
@@ -317,13 +318,6 @@ def run_testcases(test_cases):
     return P_iso, delta, X, Y
 
 
-p_iso, delta, X, Y = run_testcases(test_cases=[1, 2, 3, 4, 5, 6])
-
-
-dz = 50  # plot layers from top
-
-# Iso_delta
-visualize(p_iso, delta, dz, Isotopologue='2H')
-visualize(p_iso, delta, dz, Isotopologue='18O')
+# p_iso, delta, X, Y = run_testcases(test_cases=[1, 2, 3, 4, 5, 6])
 
 
