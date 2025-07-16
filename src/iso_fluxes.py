@@ -903,7 +903,6 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
         return flux_i
 
 
-
 class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffusion_base_class):
     """
     Description

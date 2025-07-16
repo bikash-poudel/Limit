@@ -922,3 +922,4 @@ class iso_cell(object):
 
         except ValueError:
             raise NotImplementedError("A required value was not provided.")
+

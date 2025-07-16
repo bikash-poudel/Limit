@@ -509,14 +509,16 @@ class iso_storage(flux_node):
 
         available space for liquid
         """
-        return (self.theta_sat - self.theta_0) * self.thickness
+        return self.theta_sat * self.thickness
+        #return (self.theta_sat - self.theta_0) * self.thickness
 
     def get_eff_liquid_volume(self, Isotopologue, **kwargs):
         """
         @return: Returns the effective volume of the storage filled with liquids  in m3.
         """
         return self.eff_saturation(Isotopologue=Isotopologue, **kwargs) \
-            * (self.theta_sat - self.theta_0) * self.thickness
+               * self.theta_sat * self.thickness
+            # * (self.theta_sat - self.theta_0) * self.thickness
 
     def get_saturation(self):
 
@@ -808,12 +810,12 @@ class iso_soil_layer(iso_storage):
                  # cell,  # as iso_cell
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                  # Dict with solutes and initial concentrations in kg/m**3 (!!NO delta signature!!) (currently supported "2H" and/or "18O")
-                 theta_t0=0.35, # volumetric water content m3/m3 at previous time
+                 theta_t0=0.35,  # volumetric water content m3/m3 at previous time
                  theta=0.3,  # volumetric water content m3/m3 at current time
                  theta_0=0.01,  # volumetric water content m3/m3 at high suctions
                  theta_sat=0.35,  # volumetric water content m3/m3 at saturation, or porosity of the soil m3/m3
                  tortuosity=0.67,  # tortuosity of the soil m/m
-                 T0 = 283.15,  # temperature at previous time step
+                 T0=283.15,  # temperature at previous time step
                  T=283.15,  # temperature in Kelvin at current time
                  rH=0,  # soil relative humidity
                  psi_0=1,  # matric potential for previous time

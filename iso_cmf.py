@@ -21,20 +21,6 @@ def visualize(p, delta, dz, Isotopologue='2H'):
     plt.legend(loc='lower right')
     plt.show()
 
-
-def _theta(psi):
-
-    alpha = 1/19.3
-    n = 2.22
-    m = 0.099
-    theta_r = 0.00
-    theta_sat = 0.35
-
-    S = (1 + (alpha * 100 * psi) ** n) ** -m
-
-    return S * (theta_sat - theta_r) + theta_r
-
-
 ###########################################################
 ############################ cmf ##########################
 def cmf_project():
@@ -83,10 +69,13 @@ def cmf_boundary(P):
 
     cell = P.cells[0]
 
-    stress = cmf.ContentStress(theta_d=0.345, theta_w=0.12)
+    summer = cmf.Weather(Tmin=30, Tmax=30, rH=20, wind=2.0)
+    cell.set_weather(summer)
+
+    stress = cmf.ContentStress(theta_d=0.18, theta_w=0.07)  #  mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
     cell.set_uptakestress(stress)
 
-    ETpot = cmf.timeseries.from_scalar(60)
+    ETpot = cmf.timeseries.from_scalar(20)
     cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
 
 
@@ -121,7 +110,7 @@ def _atm(testcase):
                          conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
                          T=303.17,              # K
                          Rh_atmosphere=0.2,
-                         Pa_atmosphere=1,
+                         Pa_atmosphere=1,       # as in sli
                          wind_speed=2,          # m/s
                          hc=0.001,              # canopy height [m] (e.g. 40)
                          d0=0.67 * 0.001,       # displacement height (e.g. 0.7 * hc)
@@ -172,12 +161,10 @@ def update_storages(c_iso, c_cmf):
     # atmosphere need not be updated #
 
     # Update layers
-
-    theta = [min(l.theta, l.porosity) for l in c_cmf.layers]  # theta from cmf.
+    theta = [min(l.theta, l.porosity) for l in c_cmf.layers]
     T_soil = [303.17] * len(c_cmf.layers)
     rH = [None] * len(c_cmf.layers)
     psi = [min(l.matrix_potential, 0) for l in c_cmf.layers]
-    # theta = [_theta(-p) for p in psi]   # theta from matrix potential
 
     c_iso.update_layers(theta=theta, T=T_soil, rH=rH, psi=psi)
 
