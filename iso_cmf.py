@@ -8,23 +8,41 @@ from src import *
 
 
 def visualize(p, delta, dz, Isotopologue='2H'):
-
     depth = [-l.center.z for l in p.get_cells()[0].layers]
-    plt.figure(figsize=(7, 10))
-    for tests in delta.keys():
-        plt.plot(delta[tests][Isotopologue][-1][:dz], depth[:dz], label='test_{}'.format(tests))
 
-    plt.xlabel(r'$\delta$ {}'.format(Isotopologue))
-    plt.ylabel('depth $[m]$')
-    plt.title('Initial testcases after 250 days')
-    plt.grid()
-    plt.legend(loc='lower right')
+    fig, ax = plt.subplots(figsize=(7, 10))
+    # plt.figure(figsize=(7, 10))
+    for tests in delta.keys():
+        ax.plot(delta[tests][Isotopologue][-1][:dz], depth[:dz], label='test_{}'.format(tests))
+
+    ax.set_xlabel(r'$\delta$ {}'.format(Isotopologue))
+    ax.set_ylabel('depth $[m]$')
+    ax.set_title('Initial testcases after 250 days')
+    ax.grid()
+    ax.legend(loc='lower right')
     plt.show()
+
+    return fig
+
+
+def _theta(psi):
+    alpha = 1 / 19.3
+    n = 2.22
+    m = 0.099
+
+    theta_sat = 0.35
+    theta_r = 0.01
+
+    S = (1 + (alpha * 100 * psi) ** n) ** -m
+
+    return S * (theta_sat - theta_r) + theta_r
+
 
 ###########################################################
 ############################ cmf ##########################
-def cmf_project():
+###########################################################
 
+def cmf_project():
     # Create a project
     p = cmf.project()
 
@@ -35,13 +53,14 @@ def cmf_project():
 
 
 def rtn_curve():
-
+    
     # Set up a soil retention curve
     # With parameters as per SISPAT (Braud et al. 2005) Yolo Light clay (Philip, 1957)
 
-    vgm = cmf.VGM_BC_RetentionCurve_Windhorst(Ksat=0.0106272,   # m/d
-                                              phi=0.35,         # porosity
-                                              alpha=1/19.3,     # inverse of air entry potential (Scale value of the water pressure(m))
+    vgm = cmf.VGM_BC_RetentionCurve_Windhorst(Ksat=0.0106272,  # m/d
+                                              phi=0.35,  # porosity
+                                              alpha=1 / 19.3,
+                                              # inverse of air entry potential (Scale value of the water pressure(m))
                                               n=2.22,
                                               m=0.099,
                                               theta_r=0.01,
@@ -49,7 +68,9 @@ def rtn_curve():
                                               )
 
     vgm.l = 0.67
-    vgm.w0 = 0.99999    # Oversaturation tolerence upto 1% for matrix pot = +1
+    # vgm.fit_w0(w1=1.01, Psi_p=1.0)    # Oversaturation tolerence upto 1% for matrix pot = +1
+    # print(vgm.w0)
+    vgm.w0 = 0.99999
 
     return vgm
 
@@ -72,22 +93,33 @@ def cmf_boundary(P):
     summer = cmf.Weather(Tmin=30, Tmax=30, rH=20, wind=2.0)
     cell.set_weather(summer)
 
-    stress = cmf.ContentStress(theta_d=0.18, theta_w=0.07)  #  mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
-    cell.set_uptakestress(stress)
+    stress = cmf.ContentStress(theta_d=0.18,
+                               theta_w=0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
 
-    ETpot = cmf.timeseries.from_scalar(20)
-    cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
+    cell.set_uptakestress(stress)
+    cell.vegetation.RootDepth = cell.layers[0].lower_boundary
+    # cell.vegetation.CanopyPARExtinction = 1.5
+    # cell.vegetation.Height = 10
+    # cell.vegetation.CanopyClosure = 0
+
+    cmf.PenmanMonteithET(cell.layers[0], cell.evaporation)
+
+    # cell.install_connection(cmf.ShuttleworthWallace)
+
+    # ETpot = cmf.timeseries.from_scalar(2)
+    # cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
 
 
 def cmf_setup():
 
     # CMF setup
+
     P, C = cmf_project()  # define project and cell
 
-    # L_boundaries = np.array([0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
-      #                       1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
+    L_boundaries = np.array([0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
+                             1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
 
-    L_boundaries = np.cumsum([0.01] * 100)
+    # L_boundaries = np.cumsum([0.01] * 100)
 
     add_cmf_layers(C, L_boundaries, rtn_curve())  # define retention curve to all cell layers
     add_connections(C, connection=cmf.Richards)  # apply layer connection
@@ -98,6 +130,7 @@ def cmf_setup():
 
 ###########################################################
 ########################## iso ############################
+###########################################################
 
 def _atm(testcase):
 
@@ -108,16 +141,16 @@ def _atm(testcase):
 
     atm = iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                          conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
-                         T=303.17,              # K
+                         T=303.17,  # K
                          Rh_atmosphere=0.2,
-                         Pa_atmosphere=1,       # as in sli
-                         wind_speed=2,          # m/s
-                         hc=0.001,              # canopy height [m] (e.g. 40)
-                         d0=0.67 * 0.001,       # displacement height (e.g. 0.7 * hc)
-                         z0m=0.1 * 0.001,
+                         Pa_atmosphere=1,  # as in sli
+                         wind_speed=2,  # m/s
+                         hc=10,  # canopy height [m] (e.g. 40)
+                         d0=0.67 * 10,  # displacement height (e.g. 0.7 * hc)
+                         z0m=0.1 * 10,
                          # roughness height for momentum (e.g. 0.1 * hc) need to be 0.0 if hc = 0.0
-                         LAI=0,  # leaf area index (e.g. 2.0)
-                         extku=0)
+                         LAI=1.1,  # leaf area index (e.g. 2.0)
+                         extku=1.5)
 
     return atm
 
@@ -126,16 +159,15 @@ def _layers(c_iso, C_cmf, testcase):
 
     """ c_iso: iso cell, c_cmf: cmf cell """
 
-    # define iso layers according to cmf-layers
-    layers = C_cmf.layers
-
     ali_2H, atm_2H = iso_delta.delta_testcases('2H', testcase=testcase)
     ali_18O, atm_18O = iso_delta.delta_testcases('18O', testcase=testcase)
     init_c_iso_2H = iso_delta.delta_to_concentration(ali_2H, '2H')
     init_c_iso_18O = iso_delta.delta_to_concentration(ali_18O, '18O')
 
+    # define iso layers according to cmf-layers
     id = 0
-    for lr in layers:
+    for lr in C_cmf.layers:
+
         new_layer = iso_storages.iso_soil_layer(ID=id,
                                                 upper_boundary=lr.upper_boundary,
                                                 lower_boundary=lr.lower_boundary,
@@ -206,7 +238,6 @@ def update_boundaries(c_iso, c_cmf, time):
 
 
 def iso_setup(testcase):
-
     ################## cmf ################
     P = cmf_setup()  # cmf project
     C = P.cells[0]  # current cell cmf
@@ -221,15 +252,18 @@ def iso_setup(testcase):
     _layers(c, C, testcase)  # add cmf layers to the current iso_cell
 
     ########### Install connections ###########
-    c.install_connections()  # install storage connections between the layers
+    c.install_connections(liquid_diffusion=True, vapor_diffusion=True,
+                          liquid_advection=True, vapor_advection=True)  # install storage connections between the layers
     c.add_evaporation()
 
     return p, P
 
 
-def run(p, P, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1):
+def run(P, p, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1):
 
-    """"
+    """
+    P: cmf project
+    p: iso project
     simulation period: days
     dt: hours
     """
@@ -237,67 +271,69 @@ def run(p, P, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1):
     print('Testcase:', testcase)
     kwargs = iso_delta.test_case_args(testcase=testcase)
 
-    C = P.cells[0]          # current cell cmf_project
-    c = p.get_cells()[0]    # current cell of iso_project
+    C = P.cells[0]  # current cell cmf_project
+    c = p.get_cells()[0]  # current cell of iso_project
 
-    ###################### Solver #######################
+    ###################### Solver ###################################################################
     solver = cmf.CVodeBanded(P)
     start = datetime(2024, 1, 1)
     end = start + timedelta(days=sim_period)
     timestep = timedelta(hours=dt)
-    ######################################################
+
+    ################# output variables  #############################################################
+    c_iso_delta = {'2H': [], '18O': []}
+    m_pot, theta, ql, qv = [], [], [], []
+    ev, ql_surface, qv_surface = [], [], []
+    error = {'2H': [], '18O': []}
+    #################################################################################################
 
     delta_t = timestep.seconds
-
-    ################# variables ###########################
-    c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
-    ev, theta, ql, qv = [], [], [], []
-    T, m_pot = [], []
-    ql_surface, qv_surface = [], []
-    ######################################################
-
     for t in solver.run(start, end, timestep):
 
         print(t)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         update_storages(c_iso=c, c_cmf=C), update_boundaries(c_iso=c, c_cmf=C, time=t)
+
+        ############################################################################################
+        ############################# run solver ####################################################
         for solute in solutes:
 
-            dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=None, **kwargs)
+            dc, err = p.run(Isotopologue=solute, delta_time=delta_t, error_tolerance=1e-09, **kwargs)
+            error[solute].append(err)
 
-            c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
-            c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to current time step
-
-        ####################################################################
-        ####################################################################
-        ev.append(c.q_evap)
+        ############################################################################################
+        ############################################################################################
         theta.append([l.theta for l in c.layers])
+        m_pot.append([l.matrix_potential for l in C.layers])
         ql.append(c.liquid_fluxes), qv.append(c.vapor_fluxes)
 
-        T.append([l.T for l in c.layers])
-        m_pot.append([l.matrix_potential for l in C.layers])
-        ql_surface.append(c.ql_surface), qv_surface.append(c.qv_surface)
-        ####################################################################
-        ####################################################################
+        ev.append(c.q_evap), ql_surface.append(c.ql_surface), qv_surface.append(c.qv_surface)
+        ############################################################################################
+        ############################################################################################
 
-    return c_iso_delta, [ev, theta, ql, qv], [T, m_pot, ql_surface, qv_surface]
+    return c_iso_delta, [theta, m_pot, ql, qv], [error, ev, ql_surface, qv_surface]
 
 
-def run_testcases(test_cases):
-
+def run_testcases(test_cases=[1], solutes=["2H", "18O"], dt=12, sim_period=250):
     """"
-    simulation period: days
+    test_cases: Braud test cases
+    sim_period: days
     dt: hours
     """
 
     delta = {}
     for Testcase in test_cases:
-
         delta[Testcase] = {}
 
         P_iso, P_cmf = iso_setup(testcase=Testcase)
-        d, X, Y = run(P_iso, P_cmf, sim_period=250, dt=12, testcase=Testcase)
+
+        d, X, Y = run(P_cmf,
+                      P_iso,
+                      sim_period=sim_period,
+                      dt=dt,
+                      solutes=solutes,
+                      testcase=Testcase)
 
         delta[Testcase]["2H"] = d["2H"]
         delta[Testcase]["18O"] = d["18O"]

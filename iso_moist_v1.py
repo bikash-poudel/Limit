@@ -6,12 +6,11 @@ import numpy as np
 
 # -*- coding: utf-8 -*-
 
-from MOIST import moist
+from MOIST import moist, moist_v1
 from src import *
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-
 
 
 def visualize(p, delta, Isotopologue='2H'):
@@ -63,7 +62,7 @@ def _layers(c, m, testcase):
 
     Tzero_sli = 273.16000366210938  # [k] 0 celcius in kelvin, value taken from sli for floating point precision
 
-    lower_boundaries = np.arange(0.1, 1.1, 0.1)
+    lower_boundaries = np.arange(0.05, 1.05, 0.05)
 
     ali_2H, atm_2H = iso_delta.delta_testcases('2H', testcase=testcase)
     ali_18O, atm_18O = iso_delta.delta_testcases('18O', testcase=testcase)
@@ -202,8 +201,193 @@ def run_testcases(m, test_cases):
 
 
 path = r"D:\Isotope transport\soil water models\MOIST\8397416\thoritical_test\output"
-m = moist(path)
+m = moist_v1(path)
 tests = [1]
 
-p, d = run_testcases(m, test_cases=tests)
+p_iso, diso = run_testcases(m, tests)
+
+# Iso_delta
+visualize(p_iso, diso, Isotopologue='2H')
+visualize(p_iso, diso, Isotopologue='18O')
+
+
+#######################
+t = len(m.dt)
+f = 86400 * 1000  # ms-1 to mm day-1
+
+delta_t = m.dt
+cum_t = np.cumsum(delta_t)
+days = cum_t / 86400
+t_steps = len(m.dt)
+
+plt_days = [50, 100, 150, 200, 250]
+plt_steps = [np.argmin(np.abs(days - target)) for target in plt_days]
+
+depth = -np.arange(0.1, 1.1, 0.1)
+qev = np.array([m.qev(t) * f for t in range(t_steps)])
+
+theta = np.array([m.theta(t) for t in plt_steps])
+
+ql = np.array([m.ql(t)[1:] for t in plt_steps])
+qv = np.array([m.qv(t)[1:] for t in plt_steps])
+T = np.array([m.T(t) for t in plt_steps])
+pot = np.array([m.head(t) for t in plt_steps])
+
+################## theta ###################
+for th, l in zip(theta, plt_days):
+    plt.plot(th, depth, label=str(l) + ' days')
+
+plt.title('theta')
+plt.xlabel('[mm3 / mm3 ]')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+############### ql profile #######################
+colors = cm.viridis(np.linspace(0, 1, len(ql)))
+for q_l, q_v, l, c in zip(ql, qv, plt_days, colors):
+    plt.plot(q_l * f, depth, label=str(l) + ' days', color=c)
+    plt.plot(q_v * f, depth, color=c, linestyle='--')
+
+plt.title('ql')
+plt.xlabel('[mm per day]')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+
+######################## qv profile ##################
+for q_v, l in zip(qv, plt_days):
+    plt.plot(q_v * f, depth, label=str(l) + ' days')
+
+plt.title('qv')
+plt.xlabel('[mm per day]')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+################# coupled profile ###############
+plt.plot((ql[-1]) * f, depth, label='ql')
+plt.plot(qv[-1] * f, depth, label='qv')
+plt.xlabel('[mm per day]')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+
+################### Temp profile ###########################
+for Tmp, l in zip(T, plt_days):
+    plt.plot(Tmp, depth, label=str(l) + ' days')
+
+plt.title('Temp')
+plt.xlabel('tmp [C]')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+
+###############  potential profile ###############
+for p, l in zip(pot, plt_days):
+    plt.plot(p, depth, label=str(l) + ' days')
+
+plt.title('matric potential')
+plt.xlabel('potential [m]')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+
+####################################################
+############# temporal surface fluxes #############
+q_ev = np.array([m.qev(t) for t in range(t_steps)]) * f
+ql0 = np.array([m.qls(t) for t in range(t_steps)]) * f
+qv0 = np.array([m.qvs(t) for t in range(t_steps)]) * f
+q_tot = np.array(ql0) + np.array(qv0)
+
+plt.plot(days[:2500], q_ev[:2500], label='qev')
+plt.plot(days[:2500], ql0[:2500], label='ql0')
+plt.plot(days[:2500], qv0[:2500], label='qv0')
+plt.plot(days[:2500], q_tot[:2500], label='total_fluxes')
+
+plt.title('surface fluxes')
+plt.xlabel('[days]')
+plt.ylabel('[mm per day]')
+plt.grid()
+plt.legend()
+plt.show()
+
+
+############ ql qv Temporal #########################
+
+qv1 = np.array([m.qv(t)[0] for t in range(t_steps)]) * f
+qv2 = np.array([m.qv(t)[1] for t in range(t_steps)]) * f
+qv3 = np.array([m.qv(t)[2] for t in range(t_steps)]) * f
+
+ql1 = np.array([m.ql(t)[0] for t in range(t_steps)]) * f
+ql2 = np.array([m.ql(t)[1] for t in range(t_steps)]) * f
+ql3 = np.array([m.ql(t)[2] for t in range(t_steps)]) * f
+
+#plt.plot(days[:2500], qv1[:2500], label='qv_1')
+#plt.plot(days[:2500], qv2[:2500], label='qv_2')
+#plt.plot(days[:2500], qv3[:2500], label='qv_3')
+plt.plot(days[:2500], ql1[:2500], label='ql_1')
+plt.plot(days[:2500], ql2[:2500], label='ql_2')
+plt.plot(days[:2500], ql3[:2500], label='ql_3')
+plt.title('SLI_ql_qv')
+plt.xlabel('[days]')
+#plt.xscale('log')
+plt.ylabel('[mm per day]')
+plt.grid()
+plt.legend()
+#plt.ylim(-2.5, 0.5)
+plt.show()
+
+
+################ theta temporal ############################
+
+th1 = np.array([m.theta(t)[0] for t in range(t_steps)])
+th2 = np.array([m.theta(t)[1] for t in range(t_steps)])
+th3 = np.array([m.theta(t)[2] for t in range(t_steps)])
+
+plt.plot(days[:250], th1[:250], label='th_l1')
+plt.plot(days[:250], th2[:250], label='th_l2')
+plt.plot(days[:250], th3[:250], label='th_l3')
+
+#plt.plot(days, qev, label='qev')
+plt.title('theta')
+plt.xlabel('[days]')
+#plt.xscale('log')
+plt.ylabel('[mm per day]')
+plt.grid()
+plt.legend()
+#plt.ylim(-2.5, 0.5)
+plt.show()
+
+
+############### temporal  potential #####
+pot1 = np.array([m.head(t)[0] for t in range(t_steps)])
+pot2 = np.array([m.head(t)[1] for t in range(t_steps)])
+pot3 = np.array([m.head(t)[2] for t in range(t_steps)])
+
+plt.plot(days[:50], pot1[:50], label='potential_l1')
+plt.plot(days[:50], pot2[:50], label='potential_l2')
+plt.plot(days[:50], pot3[:50], label='potential_l3')
+
+#plt.plot(days, qev, label='qev')
+plt.title('matric potential')
+plt.xlabel('[days]')
+#plt.xscale('log')
+plt.ylabel('[m]')
+plt.grid()
+plt.legend()
+#plt.ylim(-2.5, 0.5)
+plt.show()
+
+
 

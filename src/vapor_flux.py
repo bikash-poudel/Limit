@@ -239,10 +239,10 @@ class vapor_flux(flux_node):
         dy_left = self.left_node.theta - self.left_node.theta_t0
         dy_right = self.right_node.theta - self.right_node.theta_t0
 
-        dqv = self.qvya() * dy_left + self.qvyb() * dy_right
-        dqt = self.qTa() * self.left_node.dT + self.qTb() * self.right_node.dT
+        # dqv = self.qvya() * dy_left + self.qvyb() * dy_right
+        # dqt = self.qTa() * self.left_node.dT + self.qTb() * self.right_node.dT
 
-        return self.q_v() + dqv + dqt
+        return self.q_v()  # + dqv + dqt
 
     def q(self):
         return self.q_v() + self.q_l()

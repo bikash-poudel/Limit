@@ -82,6 +82,7 @@ class iso_cell(object):
         self.__connection_v_diff = []
         self.__connection_l_adv = []
         self.__connection_v_adv = []
+
         # Boundary Connections
         self.__connection_ev = None
         self.__connections_trans = None
@@ -646,7 +647,7 @@ class iso_cell(object):
         except ValueError:
             raise NotImplementedError("A required value was not provided.")
 
-    def update_layers(self, theta, T, rH, psi):
+    def update_layers(self, theta, T, rH=None, psi=None):
 
         """
         updates the  states to current time step.
@@ -706,8 +707,8 @@ class iso_cell(object):
         -------
         """
         try:
-            self.__aquifer.set_conc_iso_liquid(c_iso["2H"], "2H")
-            self.__aquifer.set_conc_iso_liquid(c_iso["18O"], "18O")
+            # self.__aquifer.set_conc_iso_liquid(c_iso["2H"], "2H")
+            # self.__aquifer.set_conc_iso_liquid(c_iso["18O"], "18O")
 
             self.connection_to_aquifer.ql = ql_aq
 

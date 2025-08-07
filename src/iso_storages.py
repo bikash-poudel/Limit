@@ -510,15 +510,14 @@ class iso_storage(flux_node):
         available space for liquid
         """
         return self.theta_sat * self.thickness
-        #return (self.theta_sat - self.theta_0) * self.thickness
+        # return (self.theta_sat - self.theta_0) * self.thickness
 
     def get_eff_liquid_volume(self, Isotopologue, **kwargs):
         """
         @return: Returns the effective volume of the storage filled with liquids  in m3.
         """
         return self.eff_saturation(Isotopologue=Isotopologue, **kwargs) \
-               * self.theta_sat * self.thickness
-            # * (self.theta_sat - self.theta_0) * self.thickness
+            * self.get_available_liquid_volume()
 
     def get_saturation(self):
 
@@ -1108,4 +1107,3 @@ class Point(object):
             return self
         else:
             raise TypeError('Point must be divided with a number')
-

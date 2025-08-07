@@ -625,7 +625,6 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
         return dv_i_mean
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
-
         T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
         T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
 
@@ -727,7 +726,7 @@ class liquid_advection(flux_connection):
         For liquid flux --> liquid flux
         """
 
-        return self.get_flux() * 0.5 # sli_solve:L2432, dcqldca & dcqldcb = 0.5
+        return self.get_flux() * 0.5  # sli_solve:L2432, dcqldca & dcqldcb = 0.5
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
         return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
@@ -832,7 +831,6 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
         return flux
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
-
         T_mean = (self.left_node.T + self.right_node.T) / 2  # average tempereture between nodes
         T_mean_0 = (self.left_node.T0 + self.right_node.T0) / 2  # average tempereture between nodes previous time
 
@@ -919,8 +917,9 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
                  q_Evap=0.0,
                  # evaporative flux from soil or litter surface to atmosphere (kg/(m2*day)) -> should be a negative number flowing from UpperSoilLayer to Atmosphere
                  T_surface=273.0,  # soil surface (interface atmosphere / soil) temparature in Kelvin
-                 q_l=0.0, # liquid flux between the topsoil layer and the atmosphere (m/day) - including precipitation ->in case of percepitation it should be a positive number flowing from Atmosphere to UpperSoilLayer
-                 q_v=0.0, # vapour flux into the soil
+                 q_l=0.0,
+                 # liquid flux between the topsoil layer and the atmosphere (m/day) - including precipitation ->in case of percepitation it should be a positive number flowing from Atmosphere to UpperSoilLayer
+                 q_v=0.0,  # vapour flux into the soil
                  hydrodynamic_dispersivity=0.0):  # hydrodynamic_dispersivity for liquide diffusion will be ignored when set to 0.0
 
         """
@@ -964,7 +963,12 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
     def calc_flux_i(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz", **kwargs):
 
         ciso_surface = self.c_iso_liq_surface(Isotopologue=Isotopologue, formulation_dl_i=formulation_dl_i, **kwargs)
-        nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
+
+        nk = self.nK_MathieuBariac(theta_surface=self.top_layer.theta,
+                                   theta_surface_sat=self.top_layer.theta_sat,
+                                   theta_surface_0=self.top_layer.theta_0,
+                                   **kwargs
+                                   )
 
         c_evap_out = self.get_conc_evapout(Isotopologue=Isotopologue, c_iso_surface=ciso_surface, nk=nk, **kwargs)
         c_evap_in = self.get_conc_evapin(Isotopologue=Isotopologue, nk=nk, **kwargs)
@@ -1019,18 +1023,6 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         q_in = self.atmosphere.cv_a / (ram + rbh)
 
         return q_in
-    def get_evap_influx(self):
-
-        """Evaporation flux entering soil"""
-
-        # sli_main.f90: L359 / rbh in sli_solve.f90:L2391
-
-        ram = self.ram(self.atmosphere.wind_speed, self.atmosphere.hc, self.atmosphere.d0, self.atmosphere.z0m)
-        rbh = self.rbh(self.atmosphere.wind_speed, self.atmosphere.extku, self.atmosphere.LAI)
-
-        q_in = self.atmosphere.cv_a / (ram + rbh)
-
-        return q_in
 
     q_evaporation_in = property(get_evap_influx, None, None, "Evaporation flux entering soil")
 
@@ -1064,7 +1056,8 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
     cv_surface = property(get_cv_surface, None, None, "concentration of water vapour at soil/air interface")
 
-    def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz",**kwargs):
+    def c_iso_liq_surface(self, Isotopologue, formulation_alpha_i_k="MathieuBariac", formulation_dl_i="Cuntz",
+                          **kwargs):
 
         """
         Calculates the concentration of minor isotopologue in liquid water at the surface (kg/m3_H2O)
@@ -1074,11 +1067,11 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        #nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
-
         nk = self.nK_MathieuBariac(theta_surface=self.top_layer.theta,
                                    theta_surface_sat=self.top_layer.theta_sat,
-                                   theta_surface_0=self.top_layer.theta_0)
+                                   theta_surface_0=self.top_layer.theta_0,
+                                   **kwargs
+                                   )
 
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation=formulation_alpha_i_k, **kwargs)
@@ -1134,11 +1127,11 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         dv_surface = self.dv_free_air(T=self.T_surface, Pa=self.atmosphere.Pa)
         div_surface = self.dv_i(dv=dv_surface, Isotopologue=Isotopologue, **kwargs)
 
-        # nk = self.nk_sli_solve(thetasat_surface=self.top_layer.theta_sat, Sl=self.top_layer.Sl)
-
         nk = self.nK_MathieuBariac(theta_surface=self.top_layer.theta,
                                    theta_surface_sat=self.top_layer.theta_sat,
-                                   theta_surface_0=self.top_layer.theta_0)
+                                   theta_surface_0=self.top_layer.theta_0,
+                                   **kwargs
+                                   )
 
         alpha_i_k = 1 / self.alpha_i_k(dv=dv_surface, dv_i=div_surface, nK_MathieuBariac=nk,
                                        formulation="MathieuBariac", **kwargs)
@@ -1261,7 +1254,8 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
             print(err)
             raise NotImplementedError
 
-    def nK_MathieuBariac(self, theta_surface, theta_surface_sat, theta_surface_0=0.05):
+    def nK_MathieuBariac(self, theta_surface, theta_surface_sat, theta_surface_0=0.05, **kwargs):
+
         """
         Calculates the exponent that describes the isotopic kinetic fractioning at the soil surface (nK = 1 --> dry soils ; nK = 0.5 --> saturated soils) based on Mathieu and Bariac (1996)
 
@@ -1281,18 +1275,26 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         """
         try:
             # SLI: cable_sli_solve.f90::L2375
-            n_a = 0.5
-            n_s = 1.0
 
-            nK = ((theta_surface - theta_surface_0) * n_a + (theta_surface_sat - theta_surface) * n_s) / (
-                    theta_surface_sat - theta_surface_0)
+            Barnes_Allison = kwargs.get('Barnes_Allison', False)
+            if not Barnes_Allison:
+
+                n_a = 0.5
+                n_s = 1.0
+
+                nK = ((theta_surface - theta_surface_0) * n_a +
+                      (theta_surface_sat - theta_surface) * n_s) / (theta_surface_sat - theta_surface_0)
+
+            else:
+
+                nK = 1
 
             return nK
 
         except ValueError as err:
             return 0.67
 
-    def nk_sli_solve(self, thetasat_surface, Sl,  BA83=False):
+    def nk_sli_solve(self, thetasat_surface, Sl, BA83=False):
         ## Different formulation in SLI: Appendix : B.7
 
         """
@@ -1386,6 +1388,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
         Control status: Checked on 15.05.2013 --> Results are the same as for SLI
         vmet%ra in sli_main.f90:L357 / ram in sli_solve.f90:L2323
         """
+
         ram = log((hc - d0) / z0m) ** 2 / 0.41 ** 2 / wind_speed
 
         return ram
@@ -1413,7 +1416,8 @@ class transpiration(boundary_connection):
         @type ql_Transpiration: float
         """
 
-        if isinstance(atmosphere, iso_storages.iso_atmosphere) and isinstance(soil_layer, iso_storages.iso_soil_layer):
+        if isinstance(atmosphere, iso_storages.iso_atmosphere) \
+                and isinstance(soil_layer, iso_storages.iso_soil_layer):
 
             boundary_connection.__init__(self, left_node=atmosphere, right_node=soil_layer)
             self.soil_layer = soil_layer
@@ -1435,8 +1439,8 @@ class transpiration(boundary_connection):
         Positive flux of the given Isotopologue [m/day] left to right
         """
 
-        return self.calc_flux(Isotopologue=Isotopologue) * self.soil_layer.get_conc_iso_liquid(
-            Isotopologue=Isotopologue)
+        return self.calc_flux(Isotopologue=Isotopologue) \
+            * self.soil_layer.get_conc_iso_liquid(Isotopologue=Isotopologue)
 
 
 class surface_runoff(boundary_connection):
@@ -1671,7 +1675,6 @@ class dirichlet_boundary(boundary_connection):
     def set_conc_dirichlet(self, c_dirichlet, Isotopologue):
 
         self.soil_layer.set_conc_iso_liquid(c_dirichlet, Isotopologue=Isotopologue)
-        #self.ci_dirichlet[Isotopologue] = c_dirichlet
-
+        # self.ci_dirichlet[Isotopologue] = c_dirichlet
 
 

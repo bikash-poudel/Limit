@@ -55,7 +55,7 @@ def visualize(delta, sli, Isotopologue):
         i, j = 18, 'O'
 
     for case in delta.keys():
-        plt.plot(delta[case][Isotopologue][:10], d[:10], label=r'testcase_{}'.format(case))
+        plt.plot(delta[case][Isotopologue][-1][:10], d[:10], label=r'testcase_{}'.format(case))
         # plt.plot(delta[2][:10], d, label='testcase_2')
 
     plt.xlabel(r'$\delta^{{{}}}{}$ ‰ '.format(i, j), fontsize=15)
@@ -408,10 +408,9 @@ def update_boundaries(c, sli, dt):
 
 
 def run_iso(p, sli, **kwargs):
+
     solutes = ["2H", "18O"]
     c = p.get_cells()[0]  # get current cell of project
-
-    #tsteps = timeSteps(c.layers)
 
     c_iso, c_iso_delta = {'2H': [], '18O': []}, {'2H': [], '18O': []}
     for dt in range(1, len(sli.get_in_soil()) - 1):  # starting from next time step (n+1)
@@ -419,7 +418,6 @@ def run_iso(p, sli, **kwargs):
 
         print(dt)
         print(c.conc_2H_delta)
-        print(c.conc_18O_delta)
 
         c_iso["2H"].append(c.conc_2H), c_iso["18O"].append(c.conc_18O)
         c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
@@ -458,6 +456,7 @@ def iso_setup(sli, testcase=1, **kwargs):
 
 
 def run_testcases(test_cases):
+
     delta = {}
     for Testcase in test_cases:
         print('Testcase:', Testcase)
@@ -469,8 +468,8 @@ def run_testcases(test_cases):
         d = iso_setup(sli, testcase=Testcase, **cases)
 
         # delta at the end of simulation for each test cases
-        delta[Testcase]["2H"] = d["2H"][-1]
-        delta[Testcase]["18O"] = d["18O"][-1]
+        delta[Testcase]["2H"] = d["2H"]
+        delta[Testcase]["18O"] = d["18O"]
 
     return delta
 
@@ -494,10 +493,10 @@ def enrichment_max(Isotopologue, testcase, delta):
 
 
 sli = get_sli(testcase=1)
-#delta = run_testcases([1, 2, 3, 4, 5, 6])
+delta = run_testcases([1])
 
-# visualize(delta=delta, sli=sli, Isotopologue="2H")
-# visualize(delta=delta, sli=sli, Isotopologue="18O")
+visualize(delta=delta, sli=sli, Isotopologue="2H")
+visualize(delta=delta, sli=sli, Isotopologue="18O")
 
 #ignore = test_case(testcase=1)
 # d = iso_setup(sli=slI, testcase=2, **ignore)
@@ -510,7 +509,7 @@ cum_t = np.cumsum(delta_t)
 days = cum_t / 86400
 
 plt_days = [50, 100, 150, 200, 250]
-plt_steps = [np.argmin(np.abs(days - target)) for target in plt_days]
+plt_steps = [np.argmin(np.abs(days - target)) - 1 for target in plt_days]
 
 depth = - np.cumsum(sli.dx(0))[:10]
 qev = [sli.qevapsig(t) * f for t in range(len(sli.get_scaler())-1)]
@@ -521,6 +520,20 @@ ql = np.array([sli.qlsig(t)[:10] for t in plt_steps])
 qv = np.array([sli.qvsig(t)[1:11] for t in plt_steps])
 T = np.array([sli.T_soil0(t)[:10] for t in plt_steps])
 pot = np.array([sli.matric_pot(t)[:10] for t in plt_steps])
+
+#################### delta profile ##########################
+delta_2H, delta_18O = delta[1]['2H'], delta[1]['18O']
+_delta_18O = [delta_2H[t] for t in plt_steps]
+for d, l in zip(_delta_18O, plt_days):
+    plt.plot(d[:10], depth, label=str(l) + ' days')
+
+plt.title('delta')
+plt.xlabel('delta')
+plt.ylabel('depth [m]')
+plt.legend()
+plt.grid()
+plt.show()
+#############################################################
 
 ################## theta ###################
 for th, l in zip(theta, plt_days):
@@ -602,9 +615,10 @@ lE0 = np.array(q_ev) * np.array(lamda) * 1000
 
 fig, ax1 = plt.subplots()
 ax2 = ax1.twinx()
-l1, = ax1.plot(days[:1000], qev[:1000], '-b', label='qev')
-l2, = ax2.plot(days[:1000], epot[:1000], '-g', label='epot')
-l3, = ax2.plot(days[:1000], lE0[:1000], '-y', label='E_evap')
+l1, = ax1.plot(days, qev, '-b', label='qev')
+# l2, = ax2.plot(days, np.array(epot) / (np.array(lamda)) * 86400, '-g', label='epot')
+l2, = ax2.plot(days, epot, '-g', label='epot')
+l3, = ax2.plot(days, lE0, '-y', label='E_evap')
 
 ax1.set_xlabel('[days]')
 ax1.set_ylabel('[mm per day]')
@@ -719,8 +733,8 @@ plt.show()
 ###################################################################
 cum_qev = np.cumsum(q_ev)
 
-plt.plot(days[:1000], q_ev[:1000], label='qev')
-plt.plot(days[:1000], cum_qev[:1000], label='cum Evap')
+plt.plot(days, q_ev, label='qev')
+plt.plot(days, cum_qev, label='cum Evap')
 
 plt.title('Evapotarion')
 plt.xlabel('[days]')
@@ -731,3 +745,23 @@ plt.legend()
 plt.show()
 
 ##################################
+
+################### temporal delta ##############################
+d1 = [d[0] for d in delta_18O]
+d2 = [d[1] for d in delta_18O]
+d3 = [d[2] for d in delta_18O]
+d4 = [d[3] for d in delta_18O]
+d5 = [d[4] for d in delta_18O]
+
+plt.plot(days[1:], np.array(d1), label='delta l1')
+plt.plot(days[1:], np.array(d2), label='delta l2')
+plt.plot(days[1:], np.array(d3), label='delta l3')
+plt.plot(days[1:], np.array(d4), label='delta l4')
+plt.plot(days[1:], np.array(d5), label='delta l5')
+plt.title('delta')
+plt.xlabel('[days]')
+plt.ylabel('delta')
+plt.grid()
+plt.legend()
+plt.show()
+################### temporal delta ##############################

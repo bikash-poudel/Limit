@@ -110,10 +110,19 @@ def delta_testcases(Isotopologue, testcase=1):
     return delta_ali[Isotopologue], delta_atm[Isotopologue]
 
 
-def test_case_args(testcase=1):
+def test_case_args(testcase=1, BA=False):
 
     # Testcases: Mathieu and Bariac (1996)
-    ignore = {'ignoredvi': True, 'ignoredli': True, 'ignorealphai': True, 'ignorealphaik': True}
+    ignore = {'ignoredvi': True,
+              'ignoredli': True,
+              'ignorealphai': True,
+              'ignorealphaik': True,
+              'Barnes_Allison': BA
+              }
+
+    # Condition: Barnes_Allison is only allowed in testcase 6
+    if ignore['Barnes_Allison'] and testcase != 6:
+        raise ValueError("Barnes_Allison can only be True if testcase is 6")
 
     if testcase == 1 or testcase == 2:
         return ignore
@@ -124,7 +133,7 @@ def test_case_args(testcase=1):
         ignore['ignorealphai'] = False
         ignore['ignoredli'] = False
         return ignore
-    elif testcase in [6, 7, 8]:
+    elif testcase == 6:
         ignore['ignorealphai'] = False
         ignore['ignoredli'] = False
         ignore['ignoredvi'] = False
