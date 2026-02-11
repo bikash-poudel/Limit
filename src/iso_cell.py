@@ -10,7 +10,51 @@ from . import vapor_flux
 from . import iso_delta
 
 
-class iso_cell(object):
+class cell_node(object):
+    """
+     Description
+     ===========
+
+     """
+
+    # Class attribute
+
+    def __init__(self, location=None):
+        """
+        Constructor of flux_node
+
+        """
+
+        self.__Connections = []  # list holding all flux connections from and to this layer (e.g. advection, diffusion of the liquid or vapor phase, or any boundary condition)
+        self.__location = location
+        self._neighbours = []
+        self.__neighbour_connection = {}
+
+    def get_connections(self):
+        return self.__Connections
+
+    def neighbours(self):
+        return self._neighbours
+
+    def RegisterConnection(self, newConnection):
+        """
+        Registers the given connection.
+        """
+        self.__Connections.append(newConnection)
+        other = newConnection.right_node if newConnection.left_node is self else newConnection.left_node
+
+        self._neighbours.append(other)
+        self.__neighbour_connection[other] = newConnection
+
+    def get_flow_width(self, cell):
+
+        try:
+            return self.__neighbour_connection[cell].flow_width
+        except KeyError:
+            raise NotImplementedError(f'{self} is not connected to {cell}')
+
+
+class iso_cell(cell_node):
     """
     Description
     ===========
@@ -39,15 +83,19 @@ class iso_cell(object):
         @param location: Instance of iso_storages.Point
         @type location: tuple of size 3 (x, y, z)
         """
+        cell_node.__init__(self, location)
 
         self.__ID = self.__class__.current_ID
         self.__class__.current_ID += 1  # increment the current ID for the next flux node to be created
-        # self.__class__.Dict_of_all_cells[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
+        self.__class__.Dict_of_all_cells[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
 
         assert (isinstance(location, iso_storages.Point)), "The surface center of a cell must be an instance of " \
                                                            "iso_Storages.Point"
         assert (isinstance(atmosphere, iso_storages.iso_atmosphere)), "Atmosphere must be an instance of " \
                                                                       "iso_storages.iso_atmosphere"
+
+        self.__project = None
+
         # Cell Properties
         self.location = location
         self.area = area
@@ -63,10 +111,14 @@ class iso_cell(object):
         self.__q_precipitation = 0.0  # precipitation flux
         self.__c_precipitation = {"2H": 1.0, "18O": 1.0}  # iso conc in precipitation
         self.__q_neuman = 0.0  # neuman flux
+
         self.__c_neuman = {"2H": 1.0, "18O": 1.0}  # iso conc in neuman flux
         self.__c_dirichlet = {"2H": 1.0, "18O": 1.0}  # iso conc as dirichlet boundary
 
+
+
         self.__pond = None
+        self.__surface_water = None
 
         # Soil Layers
         self.__layers = []
@@ -74,9 +126,13 @@ class iso_cell(object):
         self.__vapor_fluxes = []  # vapor fluxes within the soil
         self.__transpiration = []  # transpiration fluxes in the soil layers
         self.__conc_layers = []  # list of isotopic concentration in soil layers
+        self.__q_outlet = []
 
         # Lower boundaries
         self.__aquifer = None
+        self.__ground_water = None
+        self.__outlet = None
+
         # Storage Connections
         self.__connection_l_diff = []
         self.__connection_v_diff = []
@@ -88,11 +144,31 @@ class iso_cell(object):
         self.__connections_trans = None
         self.__connection_prec = None
         self.__connection_runoff = None
+
         self.__connection_to_aquifer = None
+        self.__connection_to_gw = None
+        self.__connection_to_outlet = None
+        self.__connection_to_surface_water = None
+
         self.__connection_neuman = None
         self.__connection_dirichlet = None
 
     """Properties"""
+
+    def get_ID(self):
+        return self.__ID
+
+    @property
+    def project(self):
+        return self.__project
+
+    @project.setter
+    def project(self, p):
+
+        """
+        @return: sets the project for current cell
+        """
+        self.__project = p
 
     @property
     def Ts(self):
@@ -103,7 +179,7 @@ class iso_cell(object):
         """
         @return: Returns a list of flux nodes belonging to this cell (soil_layers and atmosphere).
         """
-        return [self.atmosphere] + self.layers + [self.aquifer]
+        return [self.atmosphere] + self.layers + [self.aquifer] + [self.surface_water]
 
     @property
     def atmosphere(self):
@@ -203,6 +279,21 @@ class iso_cell(object):
         @return: Returns the aquifer isotope storage of the cell.
         """
         return self.__aquifer
+
+    @property
+    def surface_water(self):
+        """
+        @return: Returns the surface water isotope storage of the cell.
+        """
+        return self.__surface_water
+
+    @property
+    def outlet(self):
+        return self.__outlet
+
+    @property
+    def ground_water(self):
+        return self.__ground_water
 
     @property
     def liquid_fluxes(self):
@@ -347,6 +438,15 @@ class iso_cell(object):
         return self.__connection_runoff
 
     @property
+    def connection_to_surface_water(self):
+
+        """
+        @return: Returns the flux connection related to transpiration.
+
+        """
+        return self.__connection_to_surface_water
+
+    @property
     def connection_to_aquifer(self):
         """
         @return: Returns the flux connection related to transpiration.
@@ -363,6 +463,23 @@ class iso_cell(object):
         return self.__connection_neuman
 
     @property
+    def connection_groundwater(self):
+        """
+        @return: Returns the neuman boundary flux connection related.
+
+        """
+
+        return self.__connection_to_gw
+
+    @property
+    def connection_outlet(self):
+        """
+         @return: Returns the neuman boundary flux connection related.
+
+         """
+        return self.__connection_to_outlet
+
+    @property
     def connection_dirichlet(self):
         """
         @return: Returns the dirichlet boundary connection related.
@@ -372,7 +489,7 @@ class iso_cell(object):
 
     @property
     def storage_connections(self):
-        return self.connections_l_adv + self.connections_v_adv + self.connections_l_diff + self.connections_v_diff
+        return self.__connection_l_adv + self.__connection_v_adv + self.__connection_l_diff + self.__connection_v_diff
 
     @property
     def boundary_connections(self):
@@ -381,10 +498,15 @@ class iso_cell(object):
                        self.connection_evap,
                        self.connection_prec,
                        self.connection_runoff,
-                       self.connection_to_aquifer]
+                       self.connection_groundwater,
+                       self.connection_to_aquifer,
+                       self.connection_to_surface_water]
 
         if self.connections_transpiration is not None:
             connections.extend(self.connections_transpiration)
+
+            if self.connection_outlet is not None:
+                connections.extend(self.connection_outlet)
 
         # Filter out any None values from the connections list
         connections = [conn for conn in connections if conn is not None]
@@ -419,6 +541,7 @@ class iso_cell(object):
 
     """Functions"""
 
+    """ storages """
     def get_conc_layers(self, Isotopologue):
 
         """"List of Isotope concentration in layers """
@@ -438,33 +561,57 @@ class iso_cell(object):
             self.__layers.append(new_layer)
 
             self.__layers.sort(key=lambda
-                x: x.lower_boundary)  # sort them to make sure that they are in the right order from top to lowest
+                x: x.center.z, reverse=True)  # sort them to make sure that they are in the right order from top to lowest
 
         except AssertionError as err:
             print(err)
             raise NotImplementedError
 
     def install_connections(self, liquid_diffusion=True, vapor_diffusion=True,
-                            liquid_advection=True, vapor_advection=True):
+                            liquid_advection=True, vapor_advection=True,
+                            interface_area=None):
         """"
         Registers all the relevant connections within the layers
         """
+
+        try:
+            if interface_area is None:
+                interface = self.area
+            else:
+                interface = interface_area
+
+        except ValueError:
+            raise ValueError('!Interface area error')
+
+        climate = self.__project.climate
 
         try:
             for left_node, right_node in zip(self.layers[:-1], self.layers[1:]):
 
                 # Define connections and assign to each layers
                 if liquid_diffusion:
-                    lD = iso_fluxes.liquid_diffusion(left_node=left_node, right_node=right_node)
+                    lD = iso_fluxes.liquid_diffusion(left_node=left_node,
+                                                     right_node=right_node,
+                                                     interface_area=interface
+                                                     )
                     self.__connection_l_diff.append(lD)
                 if vapor_diffusion:
-                    vD = iso_fluxes.vapor_diffusion(left_node=left_node, right_node=right_node)
+                    vD = iso_fluxes.vapor_diffusion(left_node=left_node,
+                                                    right_node=right_node,
+                                                    interface_area=interface
+                                                    )
                     self.__connection_v_diff.append(vD)
                 if liquid_advection:
-                    ladv = iso_fluxes.liquid_advection(left_node=left_node, right_node=right_node)
+                    ladv = iso_fluxes.liquid_advection(left_node=left_node,
+                                                       right_node=right_node,
+                                                       climate=climate
+                                                       )
                     self.__connection_l_adv.append(ladv)
                 if vapor_advection:
-                    vadv = iso_fluxes.vapor_advection(left_node=left_node, right_node=right_node)
+                    vadv = iso_fluxes.vapor_advection(left_node=left_node,
+                                                      right_node=right_node,
+                                                      climate=climate
+                                                      )
                     self.__connection_v_adv.append(vadv)
 
         except Exception as err:
@@ -486,6 +633,8 @@ class iso_cell(object):
         except AssertionError as err:
             print(err)
             raise NotImplementedError
+
+    """ Fluxes """
 
     def add_evaporation(self, layer=None, hydrodynamic_dispersivity=0.0):
         """
@@ -589,6 +738,46 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
 
+    def add_surface_water(self, surface_water, soil_layer, q_surface=None):
+
+        self.__surface_water = surface_water
+
+        sw = iso_fluxes.surface_flux(soil_layer=soil_layer,
+                                     surface_water=surface_water,
+                                     ql=q_surface)
+
+        self.__connection_to_surface_water = sw
+
+    def add_ground_water(self, ground_water, soil_layer, q_gw=None):
+        """
+       Assign boundary connection to water storage body..
+
+       Returns
+       -------
+
+        # soil_layer connected to the aquifer
+        """
+
+        self.__ground_water = ground_water
+        try:
+            """
+            # Assign Atmospheric boundary
+            if soil_layer is self.bottom_layer:
+                if self.__liquid_fluxes:
+                    ql_aq = self.__liquid_fluxes[-1]  # if not None
+                else:
+                    ql_aq = None
+            else:
+                ql_aq = ql_layer
+            """
+            gw = iso_fluxes.ground_water(soil_layer=soil_layer,
+                                         ground_water=self.__ground_water,
+                                         ql_layer=q_gw)
+            self.__connection_to_gw = gw
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
+
     def add_neuman_boundary(self, soil_layer):
         """
         Assign boundary connection eq: atmosphere etc..
@@ -602,6 +791,30 @@ class iso_cell(object):
                                             q_neuman=self.q_neuman, c_neuman=self.c_neuman)
 
             self.__connection_neuman = nm
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
+
+    def add_outlet(self, outlet):
+
+        """
+        Assign boundary connection eq: atmosphere etc..
+
+        Returns
+        -------
+        """
+        try:
+
+            self.__outlet = outlet
+
+            c_outlet = []
+            for l in self.layers:
+                out = iso_fluxes.outlet(outlet=outlet,
+                                        soil_layer=l
+                                        )
+                c_outlet.append(out)
+
+            self.__connection_to_outlet = c_outlet
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
@@ -689,7 +902,7 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
 
-    def update_pond(self, pond_height):
+    def update_pond(self, pond_height=0.0):
         """
         updates the isotope concentration to current time step.
         """
@@ -699,7 +912,7 @@ class iso_cell(object):
 
         self.__pond = self.__layers[0].pond
 
-    def update_aquifer(self, c_iso={"2H": 1.0, "18O": 1.0}, ql_aq=0.0):
+    def update_aquifer(self, c_iso={"2H": 1.0, "18O": 1.0}):
         """
         Updates the iso concentration in aquifer to current time step
 
@@ -707,15 +920,60 @@ class iso_cell(object):
         -------
         """
         try:
-            # self.__aquifer.set_conc_iso_liquid(c_iso["2H"], "2H")
-            # self.__aquifer.set_conc_iso_liquid(c_iso["18O"], "18O")
-
-            self.connection_to_aquifer.ql = ql_aq
+            self.__aquifer.set_conc_iso_liquid(c_iso["2H"], "2H")
+            self.__aquifer.set_conc_iso_liquid(c_iso["18O"], "18O")
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
 
-    """"Update Fluxes"""
+    def update_surface_water(self, c_iso={"2H": 1.0, "18O": 1.0}):
+
+        """
+        Updates the iso concentration in aquifer to current time step
+
+        Returns
+        -------
+        """
+
+        try:
+            self.__surface_water.set_conc_iso_liquid(c_iso["2H"], "2H")
+            self.__surface_water.set_conc_iso_liquid(c_iso["18O"], "18O")
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.") from err
+
+    def update_groundwater(self, c_iso={"2H": 1.0, "18O": 1.0}):
+        """
+        Updates the iso concentration in aquifer to current time step
+
+        Returns
+        -------
+        """
+        try:
+
+            self.__ground_water.set_conc_iso_liquid(c_iso["2H"], "2H")
+            self.__ground_water.set_conc_iso_liquid(c_iso["18O"], "18O")
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.") from err
+
+    def update_outlet(self, c_iso={"2H": 1.0, "18O": 1.0}):
+        """
+        Updates the iso concentration in aquifer to current time step
+
+        Returns
+        -------
+        """
+        try:
+
+            self.__outlet.set_conc_iso_liquid(c_iso["2H"], "2H")
+            self.__outlet.set_conc_iso_liquid(c_iso["18O"], "18O")
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.") from err
+
+
+    """" Update Fluxes """
 
     def update_liquid_fluxes(self, liquid_fluxes):
 
@@ -771,7 +1029,7 @@ class iso_cell(object):
                                               right_node=c_v_adv.right_node,
                                               top_layer=self.top_layer)
 
-                    qv = q.qvapor()
+                    qv = q.qvapor() * self.area
                     c_v_adv.q_v = qv
                     q_v.append(qv)
 
@@ -859,6 +1117,21 @@ class iso_cell(object):
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
 
+    def update_surface_flux(self, q_surface=0.0):
+
+        """
+        Updates the runoff flux to current time step
+
+        Returns
+        -------
+        """
+        try:
+
+            self.__connection_to_surface_water.ql = q_surface
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
+
     def update_connection_to_aquifer(self, ql_layer=0.0):
 
         """
@@ -881,6 +1154,51 @@ class iso_cell(object):
 
             # self.__connection_to_aquifer.ql = ql_aq
             self.connection_to_aquifer.ql = ql_aq
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
+
+    def update_groundwater_connection(self, q_gw=0.0):
+
+        """
+        Updates the runoff flux to current time step
+
+        Returns
+        -------
+        """
+
+        try:
+
+            # self.__connection_to_aquifer.ql = ql_aq
+            self.connection_groundwater.ql = q_gw
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.")
+
+    def update_outlet_connection(self, q_outlet: list):
+
+        """
+        Updates the runoff flux to current time step
+
+        Returns
+        -------
+        """
+
+        try:
+            if len(q_outlet) == len(self.__layers):
+
+                self.__q_outlet = q_outlet
+                pass
+            else:
+                raise ValueError("number of transpiration fluxes must be equal to that of soil layers.")
+
+            # assign liquid fluxes to the connections
+            if len(q_outlet) == len(self.connection_outlet):
+
+                for qout, c_outlet in zip(self.__q_outlet, self.connection_outlet):
+                    c_outlet.ql = qout
+            else:
+                return "Number of liquid fluxes must be equal to the flux connections"
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.")
@@ -923,4 +1241,5 @@ class iso_cell(object):
 
         except ValueError:
             raise NotImplementedError("A required value was not provided.")
+
 

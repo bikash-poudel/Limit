@@ -556,9 +556,73 @@ class project(object):
 
         return h, T
 
+    def heat_solver(self, storages, dt):
+
+        ql_latent = [s.latent_liquid for s in storages]
+        qv_latent = [s.latent for s in storages]
+
+        for i, s in enumerate(storages[1:-1]):
+
+            left_c, right_c = s.connections_to_left, s.connections_to_right
+
+            ql_left = left_c[0].q_water() * self.r(left_c[0], dt)
+            ql_right = right_c[0].q_water() * self.r(right_c[0], dt)
+
+            qv_left = left_c[2].q_vapor() * self.r(left_c[2], dt)
+            qv_right = right_c[2].q_vapor() * self.r(right_c[2], dt)
+
+            q_cond_left = left_c[1].q_cond() * self.r(left_c[1], dt)
+            q_cond_right = right_c[1].q_cond() * self.r(right_c[1], dt)
+
+            # latent liquid
+            if ql_right > 0:
+                ql_latent_right = ql_latent[i + 1] * ql_right
+            elif ql_right < 0:
+                ql_latent_right = ql_latent[i] * ql_right
+            else:
+                ql_latent_right = 0
+
+            if ql_left > 0:
+                ql_latent_left = ql_latent[i] * ql_left
+            elif ql_left < 0:
+                ql_latent_left = ql_latent[i - 1] * ql_left
+            else:
+                ql_latent_left = 0
+
+            # latent vapor
+            if qv_right > 0:
+                qv_latent_right = qv_latent[i + 1] * qv_right
+            elif qv_right < 0:
+                qv_latent_right = qv_latent[i] * qv_right
+            else:
+                qv_latent_right = 0
+
+            if qv_left > 0:
+                qv_latent_left = qv_latent[i] * qv_left
+            elif qv_left < 0:
+                qv_latent_left = qv_latent[i - 1] * qv_left
+            else:
+                qv_latent_left = 0
+
+            # solving
+            A = [[s.H1, s.H2],
+                 [s.T2, s.T1]]
+            B = [ql_right + qv_right - ql_left - qv_left,
+                 q_cond_right - q_cond_left + ql_latent_right - ql_latent_left + qv_latent_right - qv_latent_left]
+
+            mat_A = csr_matrix(A)
+            kk = spsolve(mat_A, B)
+
+            T = s.T + (q_cond_right - q_cond_left
+                       + ql_latent_right - ql_latent_left
+                       + qv_latent_right - qv_latent_left) / s.T1
+
     def r(self, connection, dt):
 
         dist = connection.left_node.distance(connection.right_node)
         r = dt / dist / dist
 
         return r
+
+
+

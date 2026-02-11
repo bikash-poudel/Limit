@@ -242,7 +242,7 @@ class heat_flux(heat_node, vapor_flux):
         return k
 
 
-class heat_solve(object):
+class heat_solver(object):
 
     def __int__(self):
         pass
@@ -534,3 +534,12 @@ class heat_solve(object):
             dT[i] = (d[i] - c[i] * dT[i + 1]) / b[i]
 
         return dT
+
+
+
+
+
+
+
+
+

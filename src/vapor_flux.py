@@ -38,12 +38,20 @@ class flux_node(vapor_diffusion_base_class):
         s_psat = psat_0 * 17.270000457763672 * 237.30000305175781 / ((node.T - Tzero) + 237.30000305175781) ** 2
 
         dv = self.dv_soil_air(T=node.T, theta=node.theta, theta_sat=node.theta_sat, tortuosity=node.tortuosity)
-        rh = node.relative_humidity(node.psi, node.T)
-        sl = s_psat * Mw / 1000 / R / node.T
-        lambdav = self.lambdav(node)
+
+        # rh = node.relative_humidity(node.psi, node.T)
+
+        # derivative of vapor density wrt T [kg/m3/K]
+        drho_dT = s_psat * Mw / 1000 / R / node.T
+
+        # lambdav = self.lambdav(node)
+
+        # enhancement factor
         eta_th = 1
 
-        ke = dv * rh * sl * 1000 * lambdav * eta_th
+        # ke = dv * rh * sl * 1000 * lambdav * eta_th
+
+        ke = eta_th * dv * drho_dT
 
         return ke
 
@@ -218,7 +226,7 @@ class flux_node(vapor_diffusion_base_class):
 
 class vapor_flux(flux_node):
 
-    def __init__(self, left_node, right_node, top_layer):
+    def __init__(self, left_node, right_node, top_layer=None):
         """
         Class to calculate the vapor flux based on a given temprature gradient and hydraulic head (psi in m) gradient.
         Based on Haverd&Cuntz (2005) Eq. A.12
@@ -284,26 +292,51 @@ class vapor_flux(flux_node):
 
     def qvT(self):
 
-        q = (self.left_node.T - self.right_node.T) * (self.kE(self.left_node) + self.kE(self.right_node)) \
-            / 1000 / self.lambdav(self.top_layer) / 2 / self.rdz()
+        # q = (self.left_node.T - self.right_node.T) * (self.kE(self.left_node) + self.kE(self.right_node)) \
+          #  / 1000 / self.lambdav(self.top_layer) / 2 / self.rdz()
+
+        rho_w = 1000
+
+        kE_l = self.kE(self.left_node)
+        kE_r = self.kE(self.right_node)
+        dT = self.left_node.T - self.right_node.T
+
+        mean_kE = (kE_l + kE_r) * 0.5
+
+        # vapor flux due to thermal gradient [kg/m2/s]
+        Jv_mass = - mean_kE * (dT / self.rdz())
+
+        # convert to Darcy velocity [m/s]
+        q = Jv_mass / rho_w
 
         return q
 
     def qvh(self):
 
         node_l, node_r = self.left_node, self.right_node
+
+        # volumetric saturation vapor concentration [m3/m3]
         cv_l, cv_r = node_l.cv_sat, node_r.cv_sat
 
+        # relative humidity (0-1)
         rh_l = node_l.relative_humidity(node_l.psi, node_l.T)
         rh_r = node_r.relative_humidity(node_r.psi, node_r.T)
 
-        mean_dv = (self.dv(self.left_node) + self.dv(self.right_node)) / 2
+        # effective vapor diffusivity [m2/s] (already includes air-filled porosity and tortuosity)
+        mean_dv = 0.5 * (self.dv(self.left_node) + self.dv(self.right_node))
+
+        """
         mean_cvsat = (cv_l + cv_r) / 2
         mean_rh = (rh_l + rh_r) / 2
+        """
+
+        # difference in vapor fraction [m3/m3]
+        delta_rho_v = (cv_l * rh_l) - (cv_r * rh_r)
 
         dz = self.rdz()
 
-        return mean_dv * mean_cvsat * (rh_l - rh_r) / dz
+        # return mean_dv * mean_cvsat * (rh_l - rh_r) / dz
+        return mean_dv * delta_rho_v / dz
 
     def qya(self):
         return self.qlya() + self.qvya()
@@ -665,4 +698,5 @@ class vapor_solve(object):
         # Solve
         dy = self.thomas_scalar(a, b, c, d)
         return dy
+
 

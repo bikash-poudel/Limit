@@ -6,9 +6,19 @@ import math
 # -*- coding: utf-8 -*-
 
 from math import exp
+from numpy.typing import NDArray
+import numpy as np
 
 
-class flux_node(object):
+class IsotopeRegistry:
+    ISO_INDEX = {"2H": 0, "18O": 1}
+
+    @classmethod
+    def iso_index(cls, isotope):
+        return cls.ISO_INDEX[isotope]
+
+
+class flux_node(IsotopeRegistry):
     """
     Description
     ===========
@@ -39,7 +49,8 @@ class flux_node(object):
         self.__Connections_to_boundaries = []
         self.__Connections_to_right = []
         self.__Connections_to_left = []
-        self.__conc_iso_liquid = conc_iso_liquid
+
+        self._conc_iso_liquid: NDArray[np.float64] = np.array([conc_iso_liquid[iso] for iso in self.ISO_INDEX])
         self.T = T  # temperature in Kelvin
 
     def get_connections(self):
@@ -113,28 +124,40 @@ class flux_node(object):
         else:
             return False
 
+    def connected_nodes(self):
+
+        """Returns the nodes connected to the current node"""
+
+        return [conn.left_node if conn.right_node is self else conn.right_node
+                for conn in self.__Connections
+                ]
+
     """Functions"""
 
     def get_conc_iso_vapor(self, Isotopologue):
         """
         @return: Returns the concentration of the given isotopologue in the vapor phase in kg/m3.
         """
-        return self.__conc_iso_liquid[Isotopologue] * self.alpha_i(Isotopologue)
+        return self.get_conc_iso_liquid(Isotopologue) * self.alpha_i(Isotopologue)
 
     def get_conc_iso_liquid(self, Isotopologue):
         """
         @return: Returns the concentration of the given isotopologue in the liquid phase in kg/m3.
         """
-        return self.__conc_iso_liquid[Isotopologue]
+        return self._conc_iso_liquid[self.iso_index(Isotopologue)]
 
-    def set_conc_iso_liquid(self, new_c_iso_liquid, Isotopologue):
+    def set_conc_iso_liquid(self, value, Isotopologue):
 
+        """
+        Sets the concentration of a given isotopologue in the liquid phase (kg/m3).
+        """
         try:
-            assert new_c_iso_liquid >= 0.0, "Given isotope concentration of the isotopologue must be in kg/m2 and >0.0"
+            if value < 0.0:
+                raise ValueError(f"Given isotope concentration must be >= 0.0, got {value}")
+            else:
+                self._conc_iso_liquid[self.ISO_INDEX[Isotopologue]] = value
 
-            self.__conc_iso_liquid[Isotopologue] = new_c_iso_liquid
-
-        except AssertionError as err:
+        except ValueError as err:
             print(err)
             raise NotImplementedError
 
@@ -395,8 +418,8 @@ class iso_storage(flux_node):
                  lower_boundary,  # in (m)
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                  # Dict with solutes and initial concentrations in kg/m**3 (!!NO delta signature!!) (currently supported "2H" and/or "18O")
-                 theta_t0=0.3,  # volumetric water content m3/m3 at previous time
-                 theta=0.3,  # volumetric water content m3/m3
+                 theta_t0=0.35,  # volumetric water content m3/m3 at previous time
+                 theta=0.35,  # volumetric water content m3/m3
                  theta_0=0.0,  # volumetric water content m3/m3 at high suctions
                  theta_sat=0.35,  # volumetric water content m3/m3 at saturation, or porosity of the soil m3/m3
                  T0=283.15,  # Temperature previous time [kelvin]
@@ -411,7 +434,10 @@ class iso_storage(flux_node):
                  he=-0.193,
                  css=850,
                  rho=1400,
-                 clay=0.5
+                 clay=0.5,
+                 sand=0.2,
+                 silt=0.3,
+                 som=0.044  # organic fraction
                  ):
 
         """
@@ -420,9 +446,10 @@ class iso_storage(flux_node):
         flux_node.__init__(self, conc_iso_liquid, T)
         self.__ID = ID
         self.__class__.Dict_of_all_iso_storages[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
+
         self.__cell = None
-        self.upper_boundary = upper_boundary
-        self.lower_boundary = lower_boundary
+        self.__upper_boundary = upper_boundary
+        self.__lower_boundary = lower_boundary
         self.thickness = lower_boundary - upper_boundary
         self.theta_t0 = theta_t0
         self.theta = theta
@@ -441,22 +468,21 @@ class iso_storage(flux_node):
         self.he = he
         self.phie = self.ksat * self.he / (1 - self.lamda * self.eta)
         self.css = css
+
         self.rho = rho
         self.clay = clay
+        self.silt = silt
+        self.sand = sand
+        self.som = som
 
     """Properties"""
 
-    @property
     def get_ID(self):
         return self.__ID
 
     @property
     def cell(self):
         return self.__cell
-
-    @property
-    def area(self):
-        return self.__cell.area
 
     @property
     def center(self):
@@ -466,8 +492,36 @@ class iso_storage(flux_node):
         x = self.cell.location.x  # x coordinate of center of storage
         y = self.cell.location.y  # y coordinate of center of storage
 
-        center_depth = (self.upper_boundary + self.lower_boundary) / 2
-        return Point(x, y, center_depth)
+        center_depth = (self.__upper_boundary + self.__lower_boundary) / 2
+        z = self.cell.location.z - center_depth
+
+        return Point(x, y, z)
+
+    @property
+    def upper_boundary(self):
+
+        """
+        @return: Returns the 3D coordinates of the upper boundary of iso_storage / iso_layer
+        """
+        x = self.cell.location.x  # x coordinate of center of storage
+        y = self.cell.location.y  # y coordinate of center of storage
+
+        z = - self.__upper_boundary  # self.cell.location.z - self.__upper_boundary
+
+        return z  # Point(x, y, z)
+
+    @property
+    def lower_boundary(self):
+
+        """
+        @return: Returns the 3D coordinates of the lower boundary of iso_storage / iso_layer
+        """
+        x = self.cell.location.x  # x coordinate of center of storage
+        y = self.cell.location.y  # y coordinate of center of storage
+
+        z = - self.__lower_boundary  # self.cell.location.z - self.__lower_boundary
+
+        return z  # Point(x, y, z)
 
     @cell.setter
     def cell(self, c):
@@ -486,7 +540,7 @@ class iso_storage(flux_node):
     def get_actual_liquid_volume(self):
         """"actual volume of liquid available in the storage"""
 
-        return self.thickness * self.theta
+        return self.thickness * self.theta * self.cell.area
 
     def get_actual_vapor_volume(self):
         """"actual volume of liquid available in the storage"""
@@ -500,6 +554,17 @@ class iso_storage(flux_node):
         storage_v = self.get_available_liquid_volume()
         storage_i = self.get_conc_iso_liquid(Isotopologue=Isotopologue) \
                     * self.del_eff_saturation(Isotopologue=Isotopologue, **kwargs)
+
+        return storage_v * storage_i
+
+    def get_storage_i_implicit(self, Isotopologue, **kwargs):
+        """
+        @return: Returns the total amount of the isotopes
+        """
+        storage_v = self.get_available_liquid_volume()
+        storage_i = self.get_conc_iso_liquid(Isotopologue=Isotopologue) \
+                    * self.eff_saturation_t0(Isotopologue=Isotopologue, **kwargs)
+
         return storage_v * storage_i
 
     def get_available_liquid_volume(self):
@@ -509,8 +574,8 @@ class iso_storage(flux_node):
 
         available space for liquid
         """
-        return self.theta_sat * self.thickness
-        # return (self.theta_sat - self.theta_0) * self.thickness
+        return self.theta_sat * self.thickness * self.cell.area
+        # return (self.theta_sat - self.theta_0) * self.thickness * self.cell.area
 
     def get_eff_liquid_volume(self, Isotopologue, **kwargs):
         """
@@ -599,7 +664,39 @@ class iso_storage(flux_node):
     cv = property(get_cv, None, None,
                   "Returns the saturated water vapor volumetric mass (kg/m**3) under free air")
 
+    def eff_saturation_t0(self, Isotopologue, **kwargs):
+
+        try:
+
+            S0 = self.calc_S(theta_sat=self.theta_sat, theta_0=self.theta_0, theta=self.theta_t0)
+            cv_0 = self.calc_cv(psi=self.psi_0, T=self.T0)
+
+            liq_S_0 = (S0 - cv_0) / (1 - cv_0)
+
+            if self.pond is not None:
+                Sl_0 = liq_S_0 + self.pond.pond_height_t0 / self.thickness / (self.theta_sat - self.theta_0)
+            else:
+                Sl_0 = liq_S_0
+
+            alpha = self.alpha_i(Isotopologue=Isotopologue, T=self.T0, **kwargs)
+            dbeta = self.d_beta(Isotopologue=Isotopologue, T=self.T0, dT=self.dT, **kwargs)
+
+            if Sl_0 < 1:
+                beta = alpha + dbeta
+
+                eff_S = Sl_0 + cv_0 * beta - cv_0 * Sl_0 * beta \
+                        + (self.theta_0 / self.theta_sat)
+            else:
+                eff_S = Sl_0 + self.theta_0 / self.theta_sat
+
+            return eff_S
+
+        except ValueError as err:
+            print(err)
+            raise NotImplementedError
+
     def eff_saturation(self, Isotopologue, **kwargs):
+
         try:
             s_liq = self.get_liq_saturation()
             if s_liq < 1:
@@ -620,17 +717,9 @@ class iso_storage(flux_node):
 
         try:
 
-            Tzero = 273.16000366210938
-            Mw = 0.018015999346971512  # Molecular weight of water (kg / mol)
-            R = 8.3142995834350586  # universal gas constant (j / mol / k)
+            S0 = self.calc_S(theta_sat=self.theta_sat, theta_0=self.theta_0, theta=self.theta_t0)
+            cv_0 = self.calc_cv(psi=self.psi_0, T=self.T0)
 
-            p_sat_0 = 610.59999465942383 * exp(
-                17.270000457763672 * (self.T0 - Tzero) /
-                ((self.T0 - Tzero) + 237.30000305175781))  # Saturation vapour pressure, ps, in pascal
-            cv_sat_0 = p_sat_0 * Mw / R / self.T0 / 1000  # m3/m3
-            cv_0 = self.relative_humidity(psi=self.psi_0, T=self.T0) * cv_sat_0  # sli_utils.f90:L1417
-
-            S0 = (self.theta_t0 - self.theta_0) / (self.theta_sat - self.theta_0)
             liq_S_0 = (S0 - cv_0) / (1 - cv_0)
 
             if self.pond is not None:
@@ -753,6 +842,41 @@ class iso_storage(flux_node):
         """
         self.pond = pond
 
+    def calc_p_sat(self, T):
+
+        """
+        Returns the Saturation vapour pressure, ps, in pascal based on Goff and Gratch and valid over the range 0 to 60 Degree celsius
+
+        T_atmosphere = Temperature in Kelvin
+
+        p_sat = Saturation vapour pressure, ps, in pascal
+
+        <--checked and own implementation is okay for temp. above 273.15 Kelvin
+        """
+        # SLI: cable_sli_utils.f90::L2195-2195
+        Tzero = 273.16000366210938
+
+        p_sat = 610.59999465942383 * exp(
+            17.270000457763672 * (T - Tzero) /
+            ((T - Tzero) + 237.30000305175781))  # Saturation vapour pressure, ps, in pascal
+
+        return p_sat
+
+    def calc_cv_sat(self, T):
+
+        Mw = 0.018015999346971512  # Molecular weight of water (kg / mol)
+        R = 8.3142995834350586  # universal gas constant (j / mol / k)
+
+        return self.calc_p_sat(T=T) * Mw / R / self.T0 / 1000
+
+    def calc_cv(self, psi, T):
+
+        return self.relative_humidity(psi, T) * self.calc_cv_sat(T=T)  # sli_utils.f90:L1417
+
+    def calc_S(self, theta_sat, theta_0, theta):
+
+        return (theta - theta_0) / (theta_sat - self.theta_0)
+
 
 class iso_pond(flux_node):
     """
@@ -786,6 +910,30 @@ class iso_pond(flux_node):
     @pond_height.setter
     def pond_height(self, pond_height):
         self.__pond_height = pond_height
+
+
+class iso_surface_water(iso_aquifer):
+    """"
+    Storage of isotopes in boundary can be an instance of flux node.
+    """
+
+    def __init__(self,
+                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                 T=283.15,  # temperature in Kelvin
+                 ):
+        iso_aquifer.__init__(self, conc_iso_liquid, T)
+
+
+class iso_outlet(iso_aquifer):
+    """"
+    Storage of isotopes in boundary can be an instance of flux node.
+    """
+
+    def __init__(self,
+                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                 T=283.15,  # temperature in Kelvin
+                 ):
+        iso_aquifer.__init__(self, conc_iso_liquid, T)
 
 
 class iso_soil_layer(iso_storage):
@@ -825,6 +973,40 @@ class iso_soil_layer(iso_storage):
         flux_node.__init__(self, conc_iso_liquid, T)
         self.tortuosity = tortuosity
         self.rH = rH
+
+        self._name = None
+
+    @property
+    def Name(self):
+        """Get the layer name"""
+        return self._name
+
+    @Name.setter
+    def Name(self, value: str):
+        """Set the layer name with validation"""
+        self._name = value
+
+    def connects_to(self, other_layer):
+        """Check if this layer has lateral connection to another layer based on depth overlap"""
+
+        return self.lower_boundary < other_layer.upper_boundary and \
+            self.upper_boundary > other_layer.lower_boundary
+
+
+class canopy(flux_node):
+    """
+        Layer storing isotopes
+
+        Description
+        ===========
+          The
+        """
+
+    def __init__(self,
+                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                 volume=1  # m3
+                 ):
+        self.conc = {"2H": 1.0, "18O": 1.0}
 
 
 class Point(object):
@@ -965,7 +1147,7 @@ class Point(object):
 
                 distance = math.dist(point_1, point_2)
                 # distance = math.sqrt(math.pow(self.x - to_Point.x, 2) + math.pow(self.y - to_Point.y, 2)
-                #                    + math.pow(self.z - to_Point.z, 2))
+                #                  + math.pow(self.z - to_Point.z, 2))
             else:
 
                 point_1 = (self.x, self.y)

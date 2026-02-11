@@ -4,6 +4,8 @@ import cmf
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 
+import time
+
 from src import *
 
 
@@ -234,7 +236,7 @@ def iso_setup(testcase):
     ################# iso ##################
     atm = _atm(testcase)
 
-    p = iso_project()
+    p = iso_project_implicit()
     p.climate = 'arid'
     p.new_cell(atmosphere=atm, area=C.area, x=C.x, y=C.y, z=C.z)
 
@@ -334,4 +336,12 @@ def run_testcases(test_cases=[1], solutes=["2H", "18O"], dt=12, sim_period=250):
 
     return P_iso, delta, X, Y
 
-# p_iso, delta, X, Y = run_testcases(test_cases=[1, 2, 3, 4, 5, 6])
+start = time.time()
+dt, sim = 12, 250
+p_iso, delta, X, Y = run_testcases(test_cases=[1, 2, 3, 4, 5, 6],
+                                       solutes=["2H", "18O"],
+                                       dt=dt,  # hours
+                                       sim_period=sim,  # days
+                                       )
+end = time.time()
+print(f'time_elapsed: {end - start}')

@@ -426,7 +426,7 @@ def run_iso(p, sli, **kwargs):
         update_boundaries(c, sli, dt), update_storages(c, sli, dt)
         for solute in solutes:
             delta_t = sli.dt(dt)
-            dc = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-10, **kwargs)
+            dc, error = p.run(Isotopologue=solute, delta_time=delta_t, error_tol=1e-10, **kwargs)
 
             c_t = list(np.array(c.get_conc_layers(Isotopologue=solute)) + np.array(dc))
             c.update_c_layers(conc_iso=c_t, Isotopologue=solute)  # update iso concentrations to current time step

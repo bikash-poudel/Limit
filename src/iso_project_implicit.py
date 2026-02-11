@@ -247,7 +247,7 @@ class CellConnector(object):
             return 0.0
 
 
-class iso_project(CellConnector, StorageMapping):
+class iso_project_implicit(CellConnector, StorageMapping):
     """
     Layer storing isotopes
 
@@ -365,8 +365,10 @@ class iso_project(CellConnector, StorageMapping):
                 # extracts solution values for this cell
                 cell_solution_vector = delta_c[idxs]
 
-                c_t = np.array(c.get_conc_layers(Isotopologue=Isotopologue)) + cell_solution_vector
-                c.update_c_layers(conc_iso=c_t.tolist(), Isotopologue=Isotopologue)
+                #c_t = np.array(c.get_conc_layers(Isotopologue=Isotopologue)) + cell_solution_vector
+                #c.update_c_layers(conc_iso=c_t.tolist(), Isotopologue=Isotopologue)
+
+                c.update_c_layers(conc_iso=cell_solution_vector.tolist(), Isotopologue=Isotopologue)
 
         except ValueError:
             raise NotImplementedError
@@ -454,8 +456,8 @@ class iso_project(CellConnector, StorageMapping):
 
                 A[s_index, s_index] -= i_storage.get_eff_liquid_volume(Isotopologue=Isotopologue,
                                                                        **kwargs) / delta_time
-                B[s_index] += i_storage.get_storage_i(Isotopologue=Isotopologue,
-                                                      **kwargs) / delta_time
+                B[s_index] +=i_storage.get_storage_i_implicit(Isotopologue=Isotopologue,
+                                                               **kwargs) / delta_time
         except ValueError as err:
             print(err)
             raise NotImplementedError
@@ -468,7 +470,6 @@ class iso_project(CellConnector, StorageMapping):
             for c in self.get_flux_connections():
 
                 flux_liquid = c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
-                flux_iso = c.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
 
                 if isinstance(c, iso_fluxes.boundary_connection):
 
@@ -480,10 +481,14 @@ class iso_project(CellConnector, StorageMapping):
                     else:
                         raise ValueError("Boundary connection should have one node connected to iso_storage")
 
+                    flux_iso = c.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
+
                     index_s = self.get_storage_index(s)  # storages.index(s)
                     A[index_s, index_s] -= flux_liquid
                     B[index_s] += flux_iso
+
                 else:
+
                     index_l = self.get_storage_index(
                         c.left_node)  # storages.index(c.left_node)  # index of left storage node
                     index_r = self.get_storage_index(
@@ -507,8 +512,8 @@ class iso_project(CellConnector, StorageMapping):
                     else:
                         raise ValueError("storage connections should be either advection or diffusion")
 
-                    B[index_l] += flux_iso
-                    B[index_r] -= flux_iso
+                    # B[index_l] += flux_iso
+                    # B[index_r] -= flux_iso
 
         except ValueError as err:
             print(err)
@@ -628,7 +633,7 @@ class iso_project(CellConnector, StorageMapping):
         else:
             raise ValueError("Wrong climate input, accepted ones are 'arid' or 'humid'")
 
-    def update_lateral_fluxes(slf, ql: dict | None = None):
+    def update_lateral_fluxes(self, ql: dict | None = None):
 
         """
         Update lateral liquid advection fluxes.

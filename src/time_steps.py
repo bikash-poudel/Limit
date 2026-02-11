@@ -1,10 +1,10 @@
 
 import numpy as np
 
-from . heat_fluxes import heat_solve
+from . heat_fluxes import heat_solver
 
 
-class timeSteps(heat_solve):
+class timeSteps(heat_solver):
 
     def __init__(self, layers, ts=0, tfin=1800, dt_max=3600):
 
