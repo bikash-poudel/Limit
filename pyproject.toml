@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "limit"
+version = "0.1"
+description = "Isotope transport model"
+authors = [{name="Bikash"}]
+dependencies = [
+    "numpy",
+]
+
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
