@@ -73,6 +73,12 @@ Activate the environment:
 conda activate limit
 ```
 
+Install LIMIT in editable mode:
+
+```bash
+pip install -e .
+```
+
 If using Git Bash on Windows:
 
 ```bash
@@ -91,19 +97,7 @@ environment.yml
 
 This file contains the core Python dependencies required for the LIMIT framework.
 
-To update the environment after adding new dependencies:
 
-```bash
-conda env update -f environment.yml --prune
-```
-
-To export the current environment:
-
-```bash
-conda env export > environment.yml
-```
-
----
 
 ## Running Validation Examples
 
@@ -132,8 +126,7 @@ validation_tests/
 These experiments include:
 
 - Classical theoretical test cases
-- Analytical benchmark comparisons
-- Spatio-temporal sensitivity analyses
+- Analytical benchmark tests
 
 The provided examples are intended to reproduce the numerical behavior and validation results discussed in the manuscript.
 
@@ -185,10 +178,6 @@ This project is distributed under the MIT License.
 If you use LIMIT in your research, please cite:
 
 ```text
-LIMIT: A modular, host-independent framework for stable water isotope transport in soil
-
-Manuscript submitted to Environmental Modelling & Software.
-```
 
 A DOI and formal citation information will be added after publication.
 
