@@ -18,8 +18,8 @@ def cmf_boundary(P):
     #################### Atmospheric Boundary ###################################
     summer = cmf.Weather(Tmin=30, Tmax=30, rH=20, wind=2.0)
 
-    stress = cmf.ContentStress(theta_d=0.18,
-                               theta_w=0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
+    stress = cmf.ContentStress(theta_d=0.041649, # 0.18,
+                               theta_w=0.0147) # 0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
 
     cell.set_weather(summer)
     cell.set_uptakestress(stress)

@@ -1,5 +1,6 @@
 
 import cmf
+# import numpy as np
 
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
@@ -49,12 +50,12 @@ def rtn_curve():
                                               # inverse of air entry potential (Scale value of the water pressure(m))
                                               n=2.22,
                                               m=0.099,
-                                              theta_r=0.01,
+                                              # theta_r=0.01,
                                               eta=9.14,
                                               )
 
     vgm.l = 0.67
-    # vgm.theta_r = 0.01
+    vgm.theta_r = 0.01
     # vgm.fit_w0(w1=1.01, Psi_p=1.0)    # Oversaturation tolerence upto 1% for matrix pot = +1
     # print(vgm.w0)
     vgm.w0 = 0.99999
@@ -78,8 +79,8 @@ def cmf_boundary(P):
     summer = cmf.Weather(Tmin=30, Tmax=30, rH=20, wind=2.0)
     cell.set_weather(summer)
 
-    stress = cmf.ContentStress(theta_d=0.34,
-                               theta_w=0.12)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
+    stress = cmf.ContentStress(theta_d=0.041649, # 0.34,
+                               theta_w=0.0147) # 0.12)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
     # stress = cmf.ContentStress()
     #--------- Evaporation -1 --------------
     cell.set_uptakestress(stress)

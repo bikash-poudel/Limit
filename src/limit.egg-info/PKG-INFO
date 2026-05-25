@@ -3,4 +3,6 @@ Name: limit
 Version: 0.1
 Summary: Isotope transport model
 Author: Bikash
+License-File: license.txt
 Requires-Dist: numpy
+Dynamic: license-file

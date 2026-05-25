@@ -1,4 +1,5 @@
 README.md
+license.txt
 pyproject.toml
 src/limit/__init__.py
 src/limit/atmosphere_fluxes.py
