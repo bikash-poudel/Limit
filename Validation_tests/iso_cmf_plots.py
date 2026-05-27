@@ -8,7 +8,7 @@ import iso_cmf_Barnes_Alison as Ba
 start = time.time()
 dt, sim = 12, 250
 
-"""
+
 p_iso, delta, X, Y = iso.run_testcases(test_cases=[1, 2, 3, 4, 5, 6],
                                        solutes=["2H", "18O"],
                                        dt=dt,  # hours
@@ -23,7 +23,7 @@ p_iso, delta, X, Y = Ba.run_testcases(solutes=['2H', '18O'],
                                       sim_period=sim,  # days
                                       BA=True
                                       )
-
+"""
 
 end = time.time()
 print(f'time_elapsed: {end - start}')
@@ -32,7 +32,7 @@ print(f'time_elapsed: {end - start}')
 #----------------------- Plot information -----------------------#
 ##################################################################
 
-dz = 50  # plot layers from top
+dz = 10  # plot layers from top
 # output_dir =
 # os.makedirs(output_dir, exist_ok=True)
 
