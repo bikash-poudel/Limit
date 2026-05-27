@@ -18,17 +18,17 @@ def cmf_boundary(P):
     #################### Atmospheric Boundary ###################################
     summer = cmf.Weather(Tmin=30, Tmax=30, rH=20, wind=2.0)
 
-    stress = cmf.ContentStress(theta_d=0.041649, # 0.18,
-                               theta_w=0.0147) # 0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
+    stress = cmf.ContentStress(theta_d=0.08, # 0.18,
+                               theta_w=0.01) # 0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
 
     cell.set_weather(summer)
     cell.set_uptakestress(stress)
     cell.vegetation.RootDepth = cell.layers[0].lower_boundary
 
-    cmf.PenmanMonteithET(cell.layers[0], cell.evaporation)
+    # cmf.PenmanMonteithET(cell.layers[0], cell.evaporation)
 
-    # ETpot = cmf.timeseries.from_scalar(2)
-    # cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
+    ETpot = cmf.timeseries.from_scalar(7)
+    cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
 
     ##################### lower boundary ########################################
     # Create a  outlet (Dirichlet) boundary
