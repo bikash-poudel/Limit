@@ -34,7 +34,7 @@ def cmf_boundary(P):
     # Create a  outlet (Dirichlet) boundary
     # TODO: Is surface water created (surface water flux ultimately is non zero)
     outlet = P.NewOutlet('Lower boundary')
-    outlet.potential = - 0.7  # 1.31 (18O), 1.33 (2H) for steadystate, isothermal, -0.6(2H), -0.8(18O)  for non isothermal
+    outlet.potential = -0.6  # 1.31 (18O), 1.33 (2H) for steadystate, isothermal, -0.6(2H), -0.8(18O)  for non isothermal
     outlet.is_source = True
     cmf.Richards(cell.layers[-1], outlet)
 

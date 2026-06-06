@@ -1,6 +1,6 @@
 # LIMIT
 
-LIMIT (Loosely coupled Modular framework for Isotope Transport) is a modular, host-independent Python framework for stable water isotope transport in soils designed for integration into existing hydrological modeling systems.
+LIMIT (Loosely coupled Modular framework for Isotope Transport) is a modular, host-independent Python framework for stable water isotope transport designed for integration into existing hydrological, ecohydrological, land-surface, Earth-system, and other process-based environmental modeling systems.
 
 The framework enables isotope transport simulations without requiring tightly coupled monolithic implementations in which water, heat, and isotope transport are solved within a single model architecture.
 
@@ -10,7 +10,7 @@ The framework enables isotope transport simulations without requiring tightly co
 
 Stable water isotopes are widely used as tracers for investigating hydrological processes and water fluxes within the soil–vegetation–atmosphere continuum. Despite their scientific importance, isotope-enabled hydrological models remain relatively limited because most existing implementations rely on tightly coupled model architectures that are difficult to transfer, reuse, and extend.
 
-LIMIT addresses this limitation through a loosely coupled and modular design philosophy. The framework is intended to function as a reusable isotope transport extension layer that interacts with external hydrological host models through the exchange of state variables and fluxes at configurable temporal resolutions.
+LIMIT addresses this limitation through a loosely coupled and modular design philosophy. The framework is intended to function as a reusable isotope transport extension layer that interacts with external hydrological host models through the exchange of state variables and fluxes at configurable temporal resolutions. While originally developed for hydrological applications, the framework is equally applicable to ecohydrological models, land-surface models (LSMs), Earth-system models (ESMs), and other process-based environmental modeling frameworks that provide the required hydrological state variables and fluxes.
 
 The framework supports:
 
@@ -25,7 +25,7 @@ The framework supports:
 
 ## Host Model Dependency
 
-LIMIT is designed to operate in conjunction with an external hydrological host model. The framework relies on the host model to provide hydrological states and fluxes required for isotope transport calculations.
+LIMIT is designed to operate in conjunction with an external host model. The framework relies on the host model to provide hydrological states and fluxes required for isotope transport calculations. Potential host systems include hydrological models, ecohydrological models, land-surface models (LSMs), Earth-system models (ESMs), and other process-based environmental models.
 
 The current validation examples use the Catchment Modelling Framework (CMF) as an example host-model implementation. However, LIMIT is designed to remain independent of a specific hydrological model architecture and can be adapted to other hydrological modeling systems.
 
@@ -41,6 +41,7 @@ LIMIT/
 ├── README.md
 ├── LICENSE
 ├── environment.yml
+├── pyproject.toml
 │
 ├── src/
 │   └── limit/
@@ -140,7 +141,7 @@ General implementation guidelines:
 
 - Keep isotope transport components independent from host-model-specific code
 - Separate numerical transport logic from host-model coupling interfaces
-- Avoid hard-coded dependencies on a particular hydrological model structure
+- Avoid hard-coded dependencies on a particular host model structure
 - Preserve modularity and extensibility of transport components
 - Maintain compatibility with finite-volume based transport formulations
 

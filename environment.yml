@@ -8,3 +8,11 @@ dependencies:
   - numpy
   - numba
   - scipy
+  - pip
+
+  # core install of LIMIT (editable recommended for dev)
+  - pip:
+      - -e .
+
+      # CMF for validation runs
+      - cmf>=2.0

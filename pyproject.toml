@@ -5,12 +5,24 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "limit"
 version = "0.1"
-description = "Isotope transport model"
+description = "Loosely coupled Modular framework for Isotope Transport (LIMIT)"
 authors = [{name="Bikash"}]
 dependencies = [
     "numpy",
+    "scipy",
+    "numba",
 ]
 
+[project.optional-dependencies]
+cmf = [
+    "cmf>=2.0"
+]
+
+dev = [
+    "pytest",
+    "black",
+    "ruff"
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
