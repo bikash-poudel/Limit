@@ -1,1 +1,11 @@
 numpy
+scipy
+numba
+
+[cmf]
+cmf>=2.0
+
+[dev]
+pytest
+black
+ruff

@@ -155,6 +155,7 @@ class CellConnector(object):
     def __init__(self):
 
         super().__init__()
+        self.cell_pairs = []
         self.cell_node_connections = []
         self._all_cell_connections = []
         self._dic_cell_connections = {}
@@ -177,21 +178,63 @@ class CellConnector(object):
         else:
             raise ValueError(f"Cells {left_cell} and {right_cell} are not connected")
 
-    def install_cell_connection(self, flow_width: list,
+    def set_cell_pairs(self, cell_pairs: list):
+
+        """Set the cell pairs and their connection widths.
+
+        Define the cell-to-cell topology.
+
+        Parameters
+        ----------
+        cell_pairs : list of tuple
+            List of cell connections. Each tuple must contain
+            ``(left_cell, right_cell, flow_width)``, where,
+             ``left_cell``  and ``right_cell`` are cell objects and
+             ``flow_width`` is the width of the interface connecting them.
+
+            eg:  cell_pairs = [(cell_a, cell_b, 2.5),
+                               (cell_a, cell_c, 1.8),
+                               (cell_b, cell_d, 3.0)]
+
+       where:
+
+       - cell_a, cell_b, etc. → actual iso_cell objects
+       - third element → static flow_width
+       - each tuple represents one physical cell-to-cell connection
+       - a cell can occur in any number of tuples
+       - the order (cell_a, cell_b) establishes the connection orientation/sign convention
+       - the flux itself does not belong in this tuple because it changes with time
+
+        """
+
+        for connection in cell_pairs:
+            if len(connection) != 3:
+                raise ValueError(
+                    "Each cell connection must be a tuple of "
+                    "(left_cell, right_cell, flow_width)."
+                )
+
+        self.cell_pairs = cell_pairs
+
+
+    def install_cell_connection(self,
                                 liquid_diffusion=True, vapor_diffusion=True,
                                 liquid_advection=True, vapor_advection=True,
                                 ):
 
         """Creats connections between all the cells"""
 
-        cells = self._cells
-        for left_cell, right_cell, flow in zip(cells[:-1], cells[1:], flow_width):
+        for left_cell, right_cell, con_width in self.cell_pairs:
+
             self.connect_cells(left_cell=left_cell,
                                right_cell=right_cell,
-                               flow_width=flow,
-                               liquid_diffusion=liquid_diffusion, vapor_diffusion=vapor_diffusion,
-                               liquid_advection=liquid_advection, vapor_advection=vapor_advection
+                               flow_width=con_width,
+                               liquid_diffusion=liquid_diffusion,
+                               vapor_diffusion=vapor_diffusion,
+                               liquid_advection=liquid_advection,
+                               vapor_advection=vapor_advection
                                )
+
 
     def connect_cells(self, left_cell, right_cell, flow_width,
                       liquid_diffusion=True, vapor_diffusion=True,
@@ -373,6 +416,8 @@ class iso_project(CellConnector, StorageMapping):
         i_cell = iso_cell.iso_cell(location=i_point, atmosphere=atmosphere, area=area)
         i_cell.project = self
         self._cells.append(i_cell)
+
+        return i_cell
 
     def remove_cell(self, cell):
         """

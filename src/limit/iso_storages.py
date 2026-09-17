@@ -229,7 +229,6 @@ class flux_node(IsotopeRegistry):
 
         ignore_alpha_i = kwargs.get('ignorealphai', False)
 
-        T = T + 273.15
         if Isotopologue == "18O":
             # 1000 ln α* = −7.685 + 6712.3/T − 1,666,400/T² + 3.5041×10⁸/T³
             alpha_i = (

@@ -90,13 +90,13 @@ def cmf_boundary(P):
     # cell.vegetation.Height = 10
     # cell.vegetation.CanopyClosure = 0
 
-    # ETpot = cmf.timeseries.from_scalar(10)
-    # cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
+    ETpot = cmf.timeseries.from_scalar(10)
+    cmf.timeseriesETpot(cell.layers[0], cell.evaporation, ETpot)
     ####################################################
 
     # --------- Evaporation -2 --------------
 
-    cmf.PenmanMonteithET(cell.layers[0], cell.evaporation)
+    # cmf.PenmanMonteithET(cell.layers[0], cell.evaporation)
     # cell.install_connection(cmf.ShuttleworthWallace)
 
 
@@ -105,10 +105,10 @@ def cmf_setup():
 
     P, C = cmf_project()  # define project and cell
 
-    # L_boundaries = np.array([0.009, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
-      #                       1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
+    L_boundaries = np.array([0.009, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
+                             1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
 
-    L_boundaries = np.cumsum([0.01] * 100)
+    # L_boundaries = np.cumsum([0.01] * 100)
     # L_boundaries = np.cumsum([0.05] * 20)
 
     add_cmf_layers(C, L_boundaries, rtn_curve())  # define retention curve to all cell layers
