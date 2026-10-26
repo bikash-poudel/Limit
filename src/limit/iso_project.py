@@ -312,11 +312,8 @@ class CellConnector(object):
 
 
 class iso_project(CellConnector, StorageMapping):
+
     """
-    Layer storing isotopes
-
-    TODO: move all connections and fluxes to the layer (Evaporation, Transpiration, Extraction, Seepage) as e.g. Neumann boundary condition
-
     Description
     ===========
       The
@@ -335,7 +332,7 @@ class iso_project(CellConnector, StorageMapping):
 
         self.dc = None
 
-        self._climate = 'humid'  # 0:arid, 1: Humid
+        self._climate = 'arid'  # 0:arid, 1: humid
 
         self._storage_arrays = None
 
@@ -452,12 +449,6 @@ class iso_project(CellConnector, StorageMapping):
         @param error_tolerance:
         @type error_tolerance:
 
-        @param safety_factor: safety factor to avoid overshooting
-        @type factor:
-
-        @param dt_min: safety factor to avoid overshooting
-        @type dt_min:
-
         @param check_mass_balance:
 
         """
@@ -513,6 +504,123 @@ class iso_project(CellConnector, StorageMapping):
 
         except ValueError:
             raise NotImplementedError
+
+    def coeff_matrix(self, Isotopologue, delta_time, **kwargs):
+
+        rows, cols, vals = [], [], []
+        B = np.zeros(self.n_storages, dtype=np.float64)
+
+        storages = self.get_iso_storages()
+
+        for i_storage in storages:
+            s_index = i_storage.s_idx
+
+            eff_liq_vol = i_storage.get_eff_liquid_volume(
+                Isotopologue=Isotopologue)
+            storage_i = i_storage.get_storage_i(
+                Isotopologue=Isotopologue)
+
+            rows.append(s_index)
+            cols.append(s_index)
+            vals.append(-eff_liq_vol / delta_time)
+            B[s_index] += storage_i / delta_time
+
+        return self._flux_matrix(rows, cols, vals, B,
+                                 Isotopologue=Isotopologue, **kwargs)
+
+    def _flux_matrix(self, rows, cols, vals, B, Isotopologue, **kwargs):
+
+        try:
+            for c in self.get_flux_connections():
+
+                # flux_liquid = c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
+                # flux_iso = c.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
+
+                flux_liquid, flux_iso = c.calc_fluxes(Isotopologue=Isotopologue, **kwargs)
+                if isinstance(c, iso_fluxes.boundary_connection):
+
+                    if isinstance(c.left_node, iso_storages.iso_storage):
+                        s = c.left_node
+                    elif isinstance(c.right_node, iso_storages.iso_storage):
+                        s = c.right_node
+                    else:
+                        raise ValueError(
+                            "Boundary connection must have one iso_storage node"
+                        )
+
+                    idx = self.get_storage_index(s)
+
+                    if isinstance(c, iso_fluxes.surface_flux):
+                        da, db = self.flux_derivatives(flux_liquid)
+
+                        rows.append(idx)
+                        cols.append(idx)
+                        vals.append(-flux_liquid * da)
+
+                    else:
+                        rows.append(idx)
+                        cols.append(idx)
+                        vals.append(-flux_liquid)
+
+                    # rows.append(idx)
+                    # cols.append(idx)
+                    # vals.append(-flux_liquid)
+
+                    B[idx] += flux_iso
+
+                else:
+                    il = self.get_storage_index(c.left_node)
+                    ir = self.get_storage_index(c.right_node)
+                    da, db = self.flux_derivatives(flux_liquid)
+
+                    if isinstance(c, (iso_fluxes.liquid_advection,
+                                      iso_fluxes.vapor_advection)):
+                        rows += [ir, il, ir, il]
+                        cols += [ir, ir, il, il]
+                        vals += [
+                            flux_liquid * db,
+                            -flux_liquid * db,
+                            flux_liquid * da,
+                            -flux_liquid * da,
+                        ]
+
+                    elif isinstance(c, (iso_fluxes.liquid_diffusion,
+                                        iso_fluxes.vapor_diffusion)):
+                        rows += [ir, il, ir, il]
+                        cols += [ir, ir, il, il]
+                        vals += [
+                            -flux_liquid,
+                            flux_liquid,
+                            flux_liquid,
+                            -flux_liquid,
+                        ]
+
+                    else:
+                        raise ValueError(
+                            "Storage connection must be advection or diffusion"
+                        )
+
+                    B[il] += flux_iso
+                    B[ir] -= flux_iso
+
+        except ValueError as e:
+            print(e)
+            raise NotImplementedError
+
+        # A = csr_matrix(
+        #  (vals, (rows, cols)),
+        # shape=(self.n_storages, self.n_storages)
+        # )
+
+        A = csr_matrix(
+            (np.array(vals, dtype=np.float64),
+             (np.array(rows, dtype=np.int32),
+              np.array(cols, dtype=np.int32))),
+            shape=(self.n_storages, self.n_storages),
+            dtype=np.float64
+        )
+
+        return A, B
 
     def __coeff_matrix(self, Isotopologue, delta_time, **kwargs):
         """
@@ -588,109 +696,6 @@ class iso_project(CellConnector, StorageMapping):
         np.add.at(self._A.data, emap, buf)
 
         return self._A, B
-
-    def coeff_matrix(self, Isotopologue, delta_time, **kwargs):
-
-        rows, cols, vals = [], [], []
-        B = np.zeros(self.n_storages, dtype=np.float64)
-
-        storages = self.get_iso_storages()
-
-        for i_storage in storages:
-            s_index = i_storage.s_idx
-
-            eff_liq_vol = i_storage.get_eff_liquid_volume(
-                Isotopologue=Isotopologue)
-            storage_i = i_storage.get_storage_i(
-                Isotopologue=Isotopologue)
-
-            rows.append(s_index)
-            cols.append(s_index)
-            vals.append(-eff_liq_vol / delta_time)
-            B[s_index] += storage_i / delta_time
-
-        return self._flux_matrix(rows, cols, vals, B,
-                                 Isotopologue=Isotopologue, **kwargs)
-
-    def _flux_matrix(self, rows, cols, vals, B, Isotopologue, **kwargs):
-
-        try:
-            for c in self.get_flux_connections():
-
-                # flux_liquid = c.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs)
-                # flux_iso = c.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
-
-                flux_liquid, flux_iso = c.calc_fluxes(Isotopologue=Isotopologue, **kwargs)
-                if isinstance(c, iso_fluxes.boundary_connection):
-
-                    if isinstance(c.left_node, iso_storages.iso_storage):
-                        s = c.left_node
-                    elif isinstance(c.right_node, iso_storages.iso_storage):
-                        s = c.right_node
-                    else:
-                        raise ValueError(
-                            "Boundary connection must have one iso_storage node"
-                        )
-
-                    idx = self.get_storage_index(s)
-                    rows.append(idx)
-                    cols.append(idx)
-                    vals.append(-flux_liquid)
-                    B[idx] += flux_iso
-
-                else:
-                    il = self.get_storage_index(c.left_node)
-                    ir = self.get_storage_index(c.right_node)
-                    da, db = self.flux_derivatives(flux_liquid)
-
-                    if isinstance(c, (iso_fluxes.liquid_advection,
-                                      iso_fluxes.vapor_advection)):
-                        rows += [ir, il, ir, il]
-                        cols += [ir, ir, il, il]
-                        vals += [
-                            flux_liquid * db,
-                            -flux_liquid * db,
-                            flux_liquid * da,
-                            -flux_liquid * da,
-                        ]
-
-                    elif isinstance(c, (iso_fluxes.liquid_diffusion,
-                                        iso_fluxes.vapor_diffusion)):
-                        rows += [ir, il, ir, il]
-                        cols += [ir, ir, il, il]
-                        vals += [
-                            -flux_liquid,
-                            flux_liquid,
-                            flux_liquid,
-                            -flux_liquid,
-                        ]
-
-                    else:
-                        raise ValueError(
-                            "Storage connection must be advection or diffusion"
-                        )
-
-                    B[il] += flux_iso
-                    B[ir] -= flux_iso
-
-        except ValueError as e:
-            print(e)
-            raise NotImplementedError
-
-        # A = csr_matrix(
-          #  (vals, (rows, cols)),
-           # shape=(self.n_storages, self.n_storages)
-        #)
-
-        A = csr_matrix(
-            (np.array(vals, dtype=np.float64),
-             (np.array(rows, dtype=np.int32),
-              np.array(cols, dtype=np.int32))),
-            shape=(self.n_storages, self.n_storages),
-            dtype=np.float64
-        )
-
-        return A, B
 
     def flux_matrix(self, A, B, Isotopologue, **kwargs):
 

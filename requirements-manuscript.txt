@@ -1,0 +1,30 @@
+cmake==4.3.2
+cmf==2.0.2
+contourpy==1.3.3
+cycler==0.12.1
+e==1.4.5
+fonttools==4.63.0
+h5py==3.16.0
+joblib==1.5.3
+kiwisolver==1.5.0
+llvmlite==0.49.0
+matplotlib==3.11.1
+narwhals==2.24.0
+numba==0.67.0
+numpy @ file:///D:/bld/numpy_1707225528937/work/dist/numpy-1.26.4-cp311-cp311-win_amd64.whl#sha256=537f0573fefb1e93b3633e8a79102e6b6d2911e09e0a90008993efef4242448e
+packaging==26.0
+pandas @ file:///C:/Users/task_177548021443634/croot/pandas_1775480305600/work
+pillow==12.3.0
+pyarrow @ file:///D:/bld/apache-arrow_1784258065010/work/python
+pyDOE==0.3.8
+pyparsing==3.3.2
+python-dateutil @ file:///C:/b/abs_3au_koqnbs/croot/python-dateutil_1716495777160/work
+scikit-learn==1.9.0
+scipy==1.17.1
+shapely==2.1.2
+six @ file:///C:/b/abs_149wuyuo1o/croot/six_1744271521515/work
+spotpy==1.6.7
+threadpoolctl==3.6.0
+tzdata @ file:///home/task_178834294813729/croot/python-tzdata_1788343367872/work
+xarray @ file:///C:/Users/task_bfrVRgMgS9GiD_0/croot/xarray_1783948595202/work
+xlrd==2.0.2

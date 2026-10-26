@@ -169,10 +169,12 @@ class flux_node(vapor_diffusion_base_class):
                 return node.phie * self.v3(node) * self.v4(node)
             
     def v4(self, node):
-        return exp(node.eta * log(node.S))
+        S = max(node.S, 1e-12)
+        return exp(node.eta * log(S))
 
     def v3(self, node):
-        return exp(-log(node.S) / node.lamda)
+        S = max(node.S, 1e-12)
+        return exp(-log(S) / node.lamda)
 
     def K(self, node):
 

@@ -2,7 +2,6 @@
 # Single source of truth for all storage computations.
 # Both scalar methods in iso_storage and the batch kernel call these functions.
 
-import numpy as np
 from numba import njit, prange
 from math import exp
 
@@ -165,7 +164,7 @@ def _calc_eff_S(Sl, cv, s_liq, theta_0, theta_sat, alpha_i, d_alpha, dT):
 
 
 @njit(cache=True)
-def _calc_avail_vol(theta_sat, thickness, area):
+def _calc_avail_vol(theta_sat, theta_0, thickness, area):
     """get_available_liquid_volume in iso_storages."""
     return theta_sat * thickness * area
 

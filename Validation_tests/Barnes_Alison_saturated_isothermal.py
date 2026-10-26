@@ -2,24 +2,58 @@
 import cmf
 import iso_cmf as iso
 
-from datetime import datetime, timedelta
 import numpy as np
 from math import exp
+
+from datetime import datetime, timedelta
 
 ###########################################################
 ############################ CMF ##########################
 ###########################################################
 
+from types import MethodType
 
-def cmf_boundary(P):
+
+def saturated_benchmark_resistance(self, ram, rbh):
+
+    """
+    Resistance consistent with saturated, isothermal evaporation.
+    """
+
+    # Existing boundary implementation assumes unit area here.
+    if not np.isclose(self.top_layer.cell.area, 1.0):
+        raise ValueError("This benchmark override requires a 1 m² cell.")
+
+    rh = float(self.atmosphere.Rh)
+
+    if not 0.0 < rh < 1.0:
+        raise ValueError("Atmospheric RH must be between zero and one.")
+
+    if not np.isclose(
+        self.T_surface, self.atmosphere.T, atol=0.05, rtol=0
+    ):
+        raise ValueError("This benchmark requires equal air/surface temperatures.")
+
+    # Before evaporation is initialized, retain the original resistance.
+    if self.q_evap <= 0.0:
+        return ram + rbh
+
+    # At equal temperatures: cv_air = RH * cv_saturated.
+    cv_air = float(self.atmosphere.cv_a)
+    cv_saturated = cv_air / rh
+
+    return (cv_saturated - cv_air) / self.q_evap
+
+
+def cmf_boundary(P, lower_potential=1.33):
 
     cell = P.cells[0]
 
     #################### Atmospheric Boundary ###################################
     summer = cmf.Weather(Tmin=30, Tmax=30, rH=20, wind=2.0)
 
-    stress = cmf.ContentStress(theta_d=0.08, # 0.18,
-                               theta_w=0.01) # 0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
+    stress = cmf.ContentStress(theta_d=0.1, # 0.18,
+                               theta_w=0.00) # 0.07)  # mpot = −153 for WP, −3.3 for FC, Standard plant wilting threshold, 	Gravity drainage ends
 
     cell.set_weather(summer)
     cell.set_uptakestress(stress)
@@ -34,7 +68,7 @@ def cmf_boundary(P):
     # Create a  outlet (Dirichlet) boundary
     # TODO: Is surface water created (surface water flux ultimately is non zero)
     outlet = P.NewOutlet('Lower boundary')
-    outlet.potential = -0.6  # 1.31 (18O), 1.33 (2H) for steadystate, isothermal, -0.6(2H), -0.8(18O)  for non isothermal
+    outlet.potential = lower_potential  # 1.31 (18O), 1.33 (2H) for steadystate, isothermal, -0.6 for non isothermal
     outlet.is_source = True
     cmf.Richards(cell.layers[-1], outlet)
 
@@ -51,7 +85,7 @@ def cmf_boundary(P):
     """
 
 
-def cmf_setup():
+def cmf_setup(lower_potential=1.33):
 
     # CMF setup
     P, C = iso.cmf_project()  # define project and cell
@@ -62,11 +96,15 @@ def cmf_setup():
     # L_boundaries = np.array([0.008, 0.016, 0.025, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1,
       #                        0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.6, 0.8, 0.95, 1.0])
 
-    L_boundaries = np.cumsum([0.01] * 100)
+    L_boundaries = np.cumsum([0.001] * 10 + [0.01] * 99)
+
+    # L_boundaries = np.concatenate([
+      #  np.arange(1, 101) * 0.01,  # 0.10–1.00 m: 100 layers
+    # ])
 
     iso.add_cmf_layers(C, L_boundaries, iso.rtn_curve())  # define retention curve to all cell layers
     iso.add_connections(C, connection=cmf.Richards)  # apply layer connection
-    cmf_boundary(P)
+    cmf_boundary(P, lower_potential=lower_potential)
 
     return P
 
@@ -84,7 +122,7 @@ def _atm():
 
     atm = iso.iso_atmosphere(conc_iso_liquid={"2H": 1.0, "18O": 1.0},
                              conc_iso_vapor={"2H": c_iso_2H, "18O": c_iso_18O},
-                             T=313.17,  # K
+                             T=303.17,  # K
                              Rh_atmosphere=0.2,
                              Pa_atmosphere=1,  # as in sli
                              wind_speed=2,  # m/s
@@ -146,50 +184,15 @@ def _layers(c_iso, C_cmf):
     return c_iso
 
 
-def update_heat(c, dt):
-
-    layers = c.layers
-    Tatm = c.atmosphere.T
-    qevap = c.q_evap / c.area
-
-    soil = {'rho_s': 2650, 'c_s': 840, 'rho_w': 1000, 'c_w': 4186, 'lambda_dry': 0.3, 'lambda_sat': 2.0}
-    hc = 10
-
-    thickness = np.array([l.thickness for l in layers])
-    T = np.array([l.T for l in layers])
-    theta = np.array([l.theta for l in layers])
-    rH = np.array([l.relative_humidity(l.psi, l.T) for l in layers])
-
-    qliq = np.insert(c.liquid_fluxes, 0, c.q_evap) / c.area
-    qvap = np.insert(c.vapor_fluxes, 0, 0) / c.area
-
-    T, Ts = iso.compute_temperature(T=T,
-                                    theta=theta,
-                                    RH=rH,
-                                    q_liq=qliq,
-                                    q_vap=qvap,
-                                    q_evap=qevap,
-                                    soil=soil,
-                                    dz=thickness,
-                                    dt=dt,
-                                    T_atm=Tatm,
-                                    h_c=hc
-                                    )
-
-    return T, Ts
-
-
 def update_storages(c_iso, c_cmf, dt):
 
     """ c_iso: iso cell, c_cmf: cmf cell """
 
     # atmosphere need not be updated #
 
-    T_soil, Ts = update_heat(c=c_iso, dt=dt)
-
     # Update layers
     theta = [min(l.theta, l.porosity) for l in c_cmf.layers]
-    # T_soil = [303.17] * len(c_cmf.layers)
+    T_soil = [303.17] * len(c_cmf.layers)
     rH = [None] * len(c_cmf.layers)
     psi = [min(l.matrix_potential, 0) for l in c_cmf.layers]
 
@@ -225,12 +228,10 @@ def update_boundaries(c_iso, c_cmf, time, dt):
     atm = iso.flux_atmosphere(atmosphere=c_iso.atmosphere, top_layer=c_iso.layers[0])
     fql, fqv = atm.E_liquid() / atm.E_total(), atm.E_vapor() / atm.E_total()  # factors determining surface fluxes
 
-    T_soil, Ts = update_heat(c=c_iso, dt=dt)
-
     q_evap = c_cmf.evaporation(time) * f
     ql_surface = - q_evap  # * fql
     qv_surface =  0 # - q_evap * fqv
-    c_iso.update_evaporation(q_ev=q_evap, ql_surface=ql_surface, qv_surface=qv_surface, T_surface=Ts)
+    c_iso.update_evaporation(q_ev=q_evap, ql_surface=ql_surface, qv_surface=qv_surface, T_surface=303.17)
 
     ##################### Lower boundary fluxes ##############################
     l = c_cmf.layers[-1]  # bottom layer
@@ -241,10 +242,10 @@ def update_boundaries(c_iso, c_cmf, time, dt):
     c_iso.update_aquifer(q_aq=q, c_iso={"2H": c_iso_2H, "18O": c_iso_18O})
 
 
-def iso_setup():
+def iso_setup(bottom_potential=1.30):
 
     ################## cmf ################
-    P = cmf_setup()  # cmf project
+    P = cmf_setup(lower_potential=bottom_potential)  # cmf project
     C = P.cells[0]  # current cell cmf
 
     ################# iso ##################
@@ -260,6 +261,9 @@ def iso_setup():
     c.install_connections(liquid_diffusion=True, vapor_diffusion=True,
                           liquid_advection=True, vapor_advection=True)  # install storage connections between the layers
     c.add_evaporation()
+    ev = c.connection_evap
+    ev.rbw = MethodType(saturated_benchmark_resistance, ev)
+
     c.add_aquifer(aquifer=aquifer(), soil_layer=c.layers[-1])
 
     p.build_mapping()
@@ -299,7 +303,6 @@ def run(P, p, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1, BA=True):
     for t in solver.run(start, end, timestep):
 
         print(t)
-        c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         update_boundaries(c_iso=c, c_cmf=C, time=t, dt=dt)
         update_storages(c_iso=c, c_cmf=C, dt=dt)
@@ -309,6 +312,8 @@ def run(P, p, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1, BA=True):
         for solute in solutes:
             dc, err = p.run(Isotopologue=solute, delta_time=delta_t, error_tolerance=1e-12, **kwargs)
             error[solute].append(err)
+
+        c_iso_delta["2H"].append(c.conc_2H_delta), c_iso_delta["18O"].append(c.conc_18O_delta)
 
         ############################################################################################
         ############################################################################################
@@ -324,7 +329,9 @@ def run(P, p, sim_period=50, dt=1, solutes=["2H", "18O"], testcase=1, BA=True):
     return c_iso_delta, [theta, m_pot, ql, qv, T], [error, ev, ql_surface, qv_surface]
 
 
-def run_testcases(solutes=["2H", "18O"], dt=12, sim_period=250, BA=True):
+def run_testcases(solutes=["2H", "18O"],
+                  bottom_potential=1.30,
+                  dt=12, sim_period=250, BA=True):
     """"
     test_cases: Braud test cases - [6] for BA test
     sim_period: days
@@ -332,7 +339,7 @@ def run_testcases(solutes=["2H", "18O"], dt=12, sim_period=250, BA=True):
     """
 
     delta = {6: {}}
-    P_iso, P_cmf = iso_setup()
+    P_iso, P_cmf = iso_setup(bottom_potential=bottom_potential)
 
     d, X, Y = run(P_cmf,
                   P_iso,

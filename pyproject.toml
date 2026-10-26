@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "limit"
-version = "0.1"
+version = "1.0.0"
 description = "Loosely coupled Modular framework for Isotope Transport (LIMIT)"
-authors = [{name="Bikash"}]
+authors = [{name="Bikash Poudel"}]
 dependencies = [
     "numpy",
     "scipy",
@@ -15,7 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 cmf = [
-    "cmf>=2.0"
+    "cmf>=2.0",
+    "matplotlib",
 ]
 
 dev = [

@@ -2,12 +2,6 @@
 Created on 23.05.2024
 @author: poudel-b
 '''
-import numpy as np
-
-'''
-Created on 23.05.2024
-@author: poudel-b
-'''
 
 # -*- coding: utf-8 -*-
 
@@ -16,6 +10,7 @@ from . import iso_storages
 from . import iso_delta
 
 from functools import lru_cache
+import numpy as np
 
 class flux_connection(object):
     """
@@ -23,9 +18,21 @@ class flux_connection(object):
     ===========
     Base class for all flux connections.
 
-    The connections hold the processes for the calculation of fluxes [kg] between storages and model boundaries based on a given or formulated flux rate [m/d].
+    The connections hold the processes for the calculation of fluxes [kg/s] between storages and model boundaries based on a given or formulated flux rate [m3/d].
+    A connection registers itself with both endpoint nodes at construction.
+    A positive flux rate [m3/s] is always considered to be from left node to right node a  negative from right to left.
 
-    A positive flux rate [m/d] is always considered to be from left node to right node a  negative from right to left.
+    Parameters
+    ----------
+    left_node : iso_storages.flux_node
+        First endpoint of the connection.
+    right_node : iso_storages.flux_node
+        Second endpoint of the connection.
+
+    Notes
+    -----
+    This class defines an interface for flux calculations. Its calculation
+    methods are not implemented here and must be supplied by subclasses.
 
     """
 
@@ -40,14 +47,13 @@ class flux_connection(object):
         """
         Constructor of flux_connection
 
-        @param left_node: The left node of this flux connection
-        @type left_node: LSI_storages.iso_storage
+        Parameters
+        ----------
+        left_node : iso_storages.flux_node
+            Left endpoint.
+        right_node : iso_storages.flux_node
+            Right endpoint.
 
-        @param right_node: The right node of this flux connection
-        @type right_node: LSI_storages.iso_storage
-
-        @param flux_crosssectional_area: Area shared by the left and the right node of the flux connection in m2
-        @type flux_crosssectional_area: float
         """
 
         try:
@@ -72,19 +78,32 @@ class flux_connection(object):
             raise NotImplementedError
 
     def get_left_node(self):
+        """
+        Return the left endpoint of this connection.
+
+        Returns
+        -------
+        iso_storages.flux_node
+        """
         return self.__left_node
 
     left_node = property(get_left_node, None, None, "Returns the left node of the flux connection")
 
     def get_right_node(self):
+        """
+        Return the right endpoint of this connection.
+
+        Returns
+        -------
+        iso_storages.flux_node
+        """
+
         return self.__right_node
 
     right_node = property(get_right_node, None, None, "Returns the right node of the flux connection")
 
     def calc_fluxes(self, Isotopologue, **kwargs):
-        """
-        Returns (flux_liquid, flux_iso) in a single call.
-        """
+
         return (
             self.calc_flux_liquid(Isotopologue=Isotopologue, **kwargs),
             self.calc_flux_i(Isotopologue=Isotopologue, **kwargs)
@@ -92,13 +111,13 @@ class flux_connection(object):
 
     def calc_flux(self, Isotopologue):
         """
-        Positive flux of water [m/day] means left to right
+        Positive flux of water [m3/s] means left to right
         """
         raise NotImplementedError
 
     def calc_flux_i(self, Isotopologue):
         """
-        Positive flux of isotopes [m/day] means left to right
+        Positive flux of isotopes [kg/s] means left to right
         flux_i = flux * isotope_concentration
         """
         raise NotImplementedError
@@ -141,9 +160,9 @@ class boundary_connection(flux_connection):
     ===========
     Base class for all flux connections.
 
-    The connections hold the processes for the calculation of fluxes [m/day] between water storages and model boundaries.
+    The connections hold the processes for the calculation of fluxes [m3/s] between water storages and model boundaries.
 
-    A positive flux rate [m/d] is always considered to be from left node to right node a  negative from right to left.
+    A positive flux rate [m3/s] is always considered to be from left node to right node a  negative from right to left.
 
 
     """
@@ -155,6 +174,12 @@ class boundary_connection(flux_connection):
         """
         Constructor of boundary_connection
 
+         Parameters
+        ----------
+        left_node : iso_storages.flux_node
+
+        right_node : iso_storages.flux_node
+
         """
         flux_connection.__init__(self, left_node, right_node)
 
@@ -164,9 +189,22 @@ class liquid_diffusion_base_class(object):
     Description
     ===========
     Functions to calculate diffusive fluxes in liquids
+
     """
 
     def __init__(self, q_l=None, hydrodynamic_dispersivity=0.0):
+
+        """
+        Store optional liquid flux and hydrodynamic dispersivity.
+
+       Parameters
+       ----------
+       q_l : float or None, optional
+           Liquid flux used when evaluating hydrodynamic dispersion.
+       hydrodynamic_dispersivity : float, optional
+           Dispersion length, in metres. Defaults to zero.
+       """
+
         self.q_l = q_l
         self.hydrodynamic_dispersivity = hydrodynamic_dispersivity
 
@@ -178,16 +216,23 @@ class liquid_diffusion_base_class(object):
         Description
         ===========
 
-        @param theta_sat: Saturated liquid phase (m**3/m**3 )
-        @type theta_sat: Float
+        Parameters
+        ----------
+        dli_eff : float
+            Liquid diffusivity before the soil-water-content scaling.
+        theta_sat : float
+            Saturated volumetric water content (m3/m3).
+        theta_r : float
+            Residual volumetric water content (m3/m3).
+        liq_sat : float
+            Liquid saturation fraction; values above one are capped at one.
 
-        @param theta_r: Residual liquid phase (m**3/m**3 )
-        @type theta_r: Float
-
-        @param liq_sat: Liquid Saturation (m/m)
-        @type liq_sat: Float
-
+         Returns
+        -------
+        float            `
+        The returned units follow those of ``dli_eff``.
         """
+
         dli_sli = dli_eff * (min(liq_sat, 1) * (theta_sat - theta_r) + theta_r)
 
         return dli_sli
@@ -201,14 +246,19 @@ class liquid_diffusion_base_class(object):
 
         Under evaporation, convective and hydrodynamic dispersion processes are negligible as compared to the diffusion ones and are frequently set to zero (Auriault and Adler, 1995)
 
-        @param dl_i: liquid diffusivity for isotope i in the soil liquide phase (m**2/day)
-        @type dl_i: Float
+        Parameters
+        ----------
+        dl_i : float
+            Liquid-phase diffusivity (m2/s).
+        q_l : float or None, optional
+            Liquid flux magnitude used for dispersion (m3/s).
+        hydrodynamic_dispersivity : float, optional
+            Dispersivity length (m); zero disables the dispersion term.
 
-        @param q_l: liqiud water flux (m/s)
-        @type q_l: Float
+        Returns
+        -------
+        float
 
-        @param hydrodynamic_dispersivity: per default set to 0 (m) because under evaporation, convective and hydrodynamic dispersion processes are negligible as compared to the diffusion ones
-        @type hydrodynamic_dispersivity: Float
         """
         try:
             if q_l is None or hydrodynamic_dispersivity == 0.0:
@@ -224,25 +274,30 @@ class liquid_diffusion_base_class(object):
 
     def dl_i(self, T, Isotopologue, theta, tortuosity, formulation="Cuntz", **kwargs):
         """
-        Calculates the liquid diffusivity for isotope i in the soil liquide phase (m**2/day)
-
         Description
         ===========
 
-        @param T: temperature T (K) (283.15 K = 10 Celsius) <-- soil or atmosphere????
-        @type T: Float
+        Calculates the liquid diffusivity for isotope i in the soil liquide phase (m**2/day)
 
-        @param Isotopologue: Identifier for the Isotopologue to be calculated (currently supported '2H' and '18O')
-        @type Isotopologue: Sting
+        Parameters
+        ----------
+        T : float
+            Temperature in kelvin.
+        Isotopologue : str
+            ``"2H"`` or ``"18O"``.
+        theta : float
+            Water-content .
+        tortuosity : float
+            Dimensionless tortuosity factor.
+        formulation : str, optional
 
-        @param theta: liquid phase (m**3/m**3 )
-        @type theta: Float
+            ``dl_i_self_diffusivity``; defaults to ``"Cuntz"``.
+        **kwargs
+            Recognizes ``ignoredli`` (bool),
 
-        @param tortuosity: tortuosity (m/m)
-        @type tortuosity: Float
-
-        @param ignore_dl_i: If set to "True" liquid diffusivity for isotope will be set to 0 = no liquid diffusivity
-        @type ignore_dl_i: Boolean
+        Returns
+        -------
+        float
 
         """
         ignore_dl_i = kwargs.get('ignoredli', False)
@@ -315,9 +370,9 @@ class liquid_diffusion(flux_connection, liquid_diffusion_base_class):
     """
     Description
     ===========
-    Diffusive flux of isotopes [kg] between to nodes.
+    Diffusive flux of isotopes [kg/s] between to nodes.
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+    A positive flux rate [kg/s] is always considered to be from left node to right node a  negative from right to left.
 
     """
 
@@ -333,7 +388,7 @@ class liquid_diffusion(flux_connection, liquid_diffusion_base_class):
         @param hydrodynamic_dispersivity: per default set to 0 (m) because under evaporation, convective and hydrodynamic dispersion processes are negligible as compared to the diffusion ones
         @type hydrodynamic_dispersivity: Float
 
-        @param q_l: liqiud water flux (m/s) (only necessary if the hydrodynamic_dispersivity shall be calculated)
+        @param q_l: liqiud water flux (m3/s) (only necessary if the hydrodynamic_dispersivity shall be calculated)
         @type q_l: Float
         """
 
@@ -579,9 +634,9 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
     """
     Description
     ===========
-    Diffusive flux of isotopes [kg] between to nodes.
+    Diffusive flux of isotopes [kg/s] between to nodes.
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+    A positive flux rate [kg/s] is always considered to be from left node to right node a  negative from right to left.
 
     """
 
@@ -642,7 +697,7 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
 
     def calc_flux(self, Isotopologue, **kwargs):
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [m3/s] left to right
         """
 
         left_node_dv_soil_air = self.dv_soil_air(T=self.left_node.T,
@@ -700,7 +755,7 @@ class vapor_diffusion(flux_connection, vapor_diffusion_base_class):
 
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [kg/s] left to right
 
         if flux >= 0.0:
             flux_i = self.left_node.get_conc_iso_vapor(Isotopologue) * flux
@@ -760,9 +815,9 @@ class liquid_advection(flux_connection):
     """
     Description
     ===========
-    Advective flux of isotopes [kg] between to nodes based on a given liquid flux [m/day]
+    Advective flux of isotopes [kg/s] between to nodes based on a given liquid flux [m3/s]
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+    A positive flux rate [kg/s] is always considered to be from left node to right node a  negative from right to left.
 
     """
 
@@ -775,7 +830,7 @@ class liquid_advection(flux_connection):
         """
         Constructor of boundary_connection
 
-        @param q_l: Liquide flux in m3/(m2*day). Positive form left to right : negative from right to left
+        @param q_l: Liquide flux in m3/s. Positive form left to right : negative from right to left
         @type q_l: float
         """
         flux_connection.__init__(self, left_node, right_node)
@@ -784,7 +839,7 @@ class liquid_advection(flux_connection):
 
     def get_flux(self):
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [m3/s] left to right
         """
         flux = self.q_l
 
@@ -797,14 +852,14 @@ class liquid_advection(flux_connection):
         For liquid flux --> liquid flux
         """
 
-        return self.get_flux()
+        return self.get_flux() * 0.5
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
         return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
 
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [kg/s] left to right
         """
 
         flux = self.get_flux()
@@ -844,7 +899,7 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
     """
     Description
     ===========
-    Advective flux of isotopes [kg] between to nodes based on a given vapor flux [m/day]
+    Advective flux of isotopes [kg/s] between to nodes based on a given vapor flux [m3/s]
 
     A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
 
@@ -859,7 +914,7 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
         """
         Constructor of boundary_connection
 
-        @param q_v: vapor flux in (m/day). Positive form left to right : negative from right to left
+        @param q_v: vapor flux in (m3/s). Positive form left to right : negative from right to left
         @type q_v: float
         """
         vapor_diffusion_base_class.__init__(self)
@@ -914,7 +969,7 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
 
     def get_flux(self):
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [m3/s] left to right
         """
 
         flux = self.q_v
@@ -971,7 +1026,7 @@ class vapor_advection(flux_connection, vapor_diffusion_base_class):
 
     def calc_flux_i(self, Isotopologue, **kwargs):
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [m3/s] left to right
 
         """
 
@@ -1051,9 +1106,9 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
     """
     Description
     ===========
-    Flux of isotopes [kg] between two nodes (atmosphere and upper soil layer) due to evaporation.
+    Flux of isotopes [kg/s] between two nodes (atmosphere and upper soil layer) due to evaporation.
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+    A positive flux rate [kg/s] is always considered to be from left node to right node a  negative from right to left.
 
     """
 
@@ -1061,17 +1116,17 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
                  atmosphere,
                  top_layer,
                  q_Evap=0.0,
-                 # evaporative flux from soil or litter surface to atmosphere (kg/(m2*day)) -> should be a negative number flowing from UpperSoilLayer to Atmosphere
+                 # evaporative flux from soil or litter surface to atmosphere (m3/s) -> should be a negative number flowing from UpperSoilLayer to Atmosphere
                  T_surface=273.0,  # soil surface (interface atmosphere / soil) temparature in Kelvin
                  q_l=0.0,
-                 # liquid flux between the topsoil layer and the atmosphere (m/day) - including precipitation ->in case of percepitation it should be a positive number flowing from Atmosphere to UpperSoilLayer
+                 # liquid flux between the topsoil layer and the atmosphere (m3/s) - including precipitation ->in case of percepitation it should be a positive number flowing from Atmosphere to UpperSoilLayer
                  q_v=0.0,  # vapour flux into the soil
                  hydrodynamic_dispersivity=0.0):  # hydrodynamic_dispersivity for liquide diffusion will be ignored when set to 0.0
 
         """
         Constructor of evaporation
 
-        @param q_Evaporation: Flux of evaporation in kg/(m2*s)
+        @param q_Evaporation: Flux of evaporation in m3/s
         @type q_Evaporation: float
 
         @param T_surface: surface temperature at the interface atmosphere / soil) K
@@ -1102,7 +1157,9 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
         delta_c_evapout = self.delta_evapout_c_iso(Isotopologue, **kwargs)
         flux = self.q_evaporation_out * delta_c_evapout
+
         return flux # self.q_evap # flux
+        # return self.q_evap
 
     def calc_flux_liquid(self, Isotopologue, **kwargs):
         return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
@@ -1125,7 +1182,7 @@ class evaporation(boundary_connection, vapor_diffusion_base_class, liquid_diffus
 
         evap_flux = evap_flux_out - evap_flux_in
 
-        #return self.calc_flux(Isotopologue=Isotopologue) * self.top_layer.get_conc_iso_liquid(Isotopologue) # evap_flux
+        # return self.calc_flux(Isotopologue=Isotopologue) * self.top_layer.get_conc_iso_liquid(Isotopologue) # evap_flux
         return evap_flux
 
     def get_conc_evapin(self, Isotopologue, nk, **kwargs):
@@ -1546,9 +1603,9 @@ class transpiration(boundary_connection):
     """
     Description
     ===========
-    Flux of isotopes [kg] due to transpiratation (root extraction) between a soil storage and the atmosphere based on a given liquid flux [m/day]
+    Flux of isotopes [kg/s] due to transpiratation (root extraction) between a soil storage and the atmosphere based on a given liquid flux [m3/s]
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
+    A positive flux rate [kg/s] is always considered to be from left node to right node a  negative from right to left.
 
     """
 
@@ -1560,7 +1617,7 @@ class transpiration(boundary_connection):
         """
         Constructor of boundary_connection
 
-        @param ql_Transpiration: negative liquid flux in (m3/(m2*day) or m/day) from node_SoilLayer to node_Atmosphere.
+        @param ql_Transpiration: negative liquid flux in (m3/s)  from node_SoilLayer to node_Atmosphere.
         @type ql_Transpiration: float
         """
 
@@ -1584,7 +1641,7 @@ class transpiration(boundary_connection):
     def calc_flux_i(self, Isotopologue, **kwargs):
 
         """
-        Positive flux of the given Isotopologue [m/day] left to right
+        Positive flux of the given Isotopologue [m3/s] left to right
         """
 
         return self.calc_flux(Isotopologue=Isotopologue) \
@@ -1592,14 +1649,7 @@ class transpiration(boundary_connection):
 
 
 class surface_runoff(boundary_connection):
-    """
-    Description
-    ===========
-    Flux of isotopes [kg] between two nodes (atmosphere and upper soil layer) due to evaporation.
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    """
 
     def __init__(self,
                  atmosphere,
@@ -1607,10 +1657,6 @@ class surface_runoff(boundary_connection):
                  q_runoff=0.0
                  ):
 
-        """
-        Constructor of evaporation
-
-        """
         if isinstance(atmosphere, iso_storages.iso_atmosphere) and isinstance(top_layer, iso_storages.iso_soil_layer):
 
             boundary_connection.__init__(self, left_node=atmosphere, right_node=top_layer)
@@ -1633,14 +1679,6 @@ class surface_runoff(boundary_connection):
 
 
 class precipitation(boundary_connection):
-    """
-    Description
-    ===========
-    Flux of isotopes [kg] between two nodes (atmosphere and upper soil layer) due to evaporation.
-
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    """
 
     def __init__(self,
                  atmosphere,
@@ -1649,10 +1687,6 @@ class precipitation(boundary_connection):
                  c_prec={"2H": 1.0, "18O": 1.0}
                  ):
 
-        """
-        Constructor of evaporation
-
-        """
         if isinstance(atmosphere, iso_storages.iso_atmosphere) and isinstance(top_layer, iso_storages.iso_soil_layer):
 
             boundary_connection.__init__(self, left_node=atmosphere, right_node=top_layer)
@@ -1679,24 +1713,12 @@ class precipitation(boundary_connection):
 
 
 class aquifer_connection(boundary_connection):
-    """
-    Description
-    ===========
-    Flux of isotopes [kg] due to transpiratation (root extraction) between a soil storage and the atmosphere based on a given liquid flux [m/day]
-
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    """
 
     def __init__(self,
                  soil_layer,
                  aquifer,
                  ql_layer=0.0,  # positive liquid flux in (kg/(m2*day)) from node_SoilLayer to node_aquifer.
                  ):
-        """
-        Constructor of boundary_connection
-
-        """
 
         if isinstance(aquifer, iso_storages.iso_aquifer) and isinstance(soil_layer, iso_storages.iso_soil_layer):
 
@@ -1736,14 +1758,7 @@ class aquifer_connection(boundary_connection):
 
 
 class neuman_boundary(boundary_connection):
-    """
-    Description
-    ===========
-    Flux of isotopes [kg] between two nodes (atmosphere and soil layer).
 
-    A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    """
 
     def __init__(self,
                  atmosphere,
@@ -1751,10 +1766,6 @@ class neuman_boundary(boundary_connection):
                  q_neuman=0.0,
                  ):
 
-        """
-        Constructor of evaporation
-
-        """
         if isinstance(atmosphere, iso_storages.iso_atmosphere) and isinstance(soil_layer, iso_storages.iso_soil_layer):
 
             boundary_connection.__init__(self, left_node=atmosphere, right_node=soil_layer)
@@ -1779,14 +1790,6 @@ class neuman_boundary(boundary_connection):
 
 
 class dirichlet_boundary(boundary_connection):
-    """
-        Description
-        ===========
-        Flux of isotopes [kg] between two nodes (atmosphere and usoil layer).
-
-        A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-        """
 
     def __init__(self,
                  atmosphere,
@@ -1794,10 +1797,6 @@ class dirichlet_boundary(boundary_connection):
                  c_layer={"2H": 1.0, "18O": 1.0}
                  ):
 
-        """
-        Constructor of evaporation
-
-        """
         if isinstance(soil_layer, iso_storages.iso_soil_layer):
 
             boundary_connection.__init__(self, left_node=atmosphere, right_node=soil_layer)
@@ -1826,26 +1825,12 @@ class dirichlet_boundary(boundary_connection):
 
 class ground_water(boundary_connection):
 
-    """
-     Description
-     ===========
-     Flux of isotopes [kg] due to transpiratation (root extraction) between a soil storage and the atmosphere based on a given liquid flux [m/day]
-
-     A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    A groundwater is the object of aquifer class
-
-     """
 
     def __init__(self,
                  soil_layer,
                  ground_water,
                  ql_layer=0.0,  # positive liquid flux in (kg/(m2*day)) from node_SoilLayer to node_aquifer.
                  ):
-        """
-        Constructor of boundary_connection
-
-        """
 
         if isinstance(ground_water, iso_storages.iso_aquifer) \
                 and isinstance(soil_layer, iso_storages.iso_soil_layer):
@@ -1885,26 +1870,12 @@ class ground_water(boundary_connection):
 
 class surface_flux(boundary_connection):
 
-    """
-     Description
-     ===========
-     Flux of isotopes [kg] due to transpiratation (root extraction) between a soil storage and the atmosphere based on a given liquid flux [m/day]
-
-     A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    A surface water is the object of aquifer class
-
-     """
 
     def __init__(self,
                  soil_layer,
                  surface_water,
                  ql=0.0,  # positive liquid flux in (kg/(m2*day)) from node_SoilLayer to node_aquifer.
                  ):
-        """
-        Constructor of boundary_connection
-
-        """
 
         if isinstance(surface_water, iso_storages.iso_aquifer) \
                 and isinstance(soil_layer, iso_storages.iso_soil_layer):
@@ -1957,10 +1928,7 @@ class outlet(boundary_connection):
                  q_outlet=0.0
                  ):
 
-        """
-        Constructor of evaporation
 
-        """
         if isinstance(outlet, iso_storages.iso_aquifer) and isinstance(soil_layer, iso_storages.iso_soil_layer):
 
             boundary_connection.__init__(self, left_node=outlet, right_node=soil_layer)
@@ -1996,16 +1964,56 @@ class outlet(boundary_connection):
                 * self.outlet.get_conc_iso_liquid(Isotopologue=Isotopologue)
 
 
+class open_water_connection(boundary_connection):
+
+    """
+    Description
+    ===========
+
+    outlet of the project; Neuman boundary
+    """
+
+    def __init__(self,
+                 left_storage,
+                 right_storage,
+                 q_open=0.0
+                 ):
+
+        if (isinstance(left_storage, iso_storages.flux_node)
+                and isinstance(right_storage, iso_storages.flux_node)):
+
+            boundary_connection.__init__(self, left_node=left_storage, right_node=right_storage)
+            self.left_storage = left_storage
+            self.right_storage = right_storage
+        else:
+            raise NotImplementedError
+
+        self.ql = q_open
+
+    def calc_flux(self, Isotopologue, **kwargs):
+
+        return self.ql
+
+    def calc_flux_liquid(self, Isotopologue, **kwargs):
+        return self.calc_flux(Isotopologue=Isotopologue, **kwargs)
+
+    def calc_flux_i(self, Isotopologue, **kwargs):
+
+
+        ql = self.calc_flux(Isotopologue, **kwargs)
+
+        if ql >= 0:  # flux to right
+
+            return self.calc_flux(Isotopologue=Isotopologue) \
+                * self.left_storage.get_conc_iso_liquid(Isotopologue=Isotopologue)
+
+        elif ql < 0:  # flux into the soil from surface
+
+            return self.calc_flux(Isotopologue=Isotopologue) \
+                * self.right_storage.get_conc_iso_liquid(Isotopologue=Isotopologue)
+
+
 class lateral_flux(flux_connection):
-
-    """
-       Description
-       ===========
-       Advective flux of isotopes [kg] between to nodes based on a given liquid flux [m/day]
-
-       A positive flux rate [kg] is always considered to be from left node to right node a  negative from right to left.
-
-    """
 
     def __init__(self, left_node, right_node, flux_type="liquid_diffusion"):
 
@@ -2032,195 +2040,4 @@ class lateral_flux(flux_connection):
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
 
-class open_water_evaporation():
-
-    """
-    Evaporation flux from open water body.
-
-    Isotope fluxes computed using the Craig-Gordon (1965) model
-    with Gonfiantini (1986) kinetic fractionation.
-
-    Internal isotope quantities carried as mass concentrations [kg m⁻³].
-    Isotope ratios R [mol/mol] used only within Craig-Gordon equations.
-    δ values computed only at output/interpretation stage.
-
-    References
-    ----------
-    Craig & Gordon (1965)
-    Gonfiantini (1986)
-    Horita & Wesolowski (1994)
-    """
-
-    def __init__(self,
-                 atmosphere,
-                 open_water_body,
-                 q_Evap=0.0,
-                 # evaporative flux from soil or litter surface to atmosphere (kg/(m2*day)) -> should be a negative number flowing from UpperSoilLayer to Atmosphere
-                 T=273.0,  # soil surface (interface atmosphere / soil) temparature in Kelvin
-                 ):
-
-        self.atmosphere = atmosphere
-        self.open_water = open_water_body
-        self.q_evap = q_Evap
-
-        # Liquid fluxes [m³ s⁻¹]
-        self.qout = []  # non-evaporative outflow
-        self.qin = []  # liquid inflow
-
-        # ── Isotope concentration of inflow [kg m⁻³] ──
-        self.conc_in = [{"2H":1.0, "18O":1.0}]
-
-        # surface temperature [K]
-        self.T = T
-
-    def calc_delta_mass(self, delta_t, Isotopologue, **kwargs):
-
-        """ KG """
-
-        return self.calc_net_iso_flux(Isotopologue=Isotopologue, **kwargs) * delta_t
-
-    def calc_net_iso_flux(self, Isotopologue, **kwargs):
-
-        """
-         Net isotope mass flux for one time step [kg s-1].
-
-         Positive qi_net = net gain of heavy isotopologue by the storage.
-
-         """
-
-        qi_out = (self.calc_flux_i_evap(Isotopologue=Isotopologue, **kwargs)
-                  + self.calc_flux_i_out(Isotopologue=Isotopologue))
-
-        qi_in = self.calc_flux_i_in(Isotopologue=Isotopologue, **kwargs)
-
-        return  qi_in - qi_out
-
-    def calc_flux_out(self):
-        """
-        Non-evaporative liquid outflow from the water body [m³ s⁻¹].
-
-        """
-        return self.qout
-
-    def calc_flux_in(self):
-        """
-        Non-evaporative liquid inflow to the water body [m³ s⁻¹].
-        """
-        return self.qin
-
-    def calc_flux_i_out(self, Isotopologue, **kwargs):
-        """
-         Isotope fluxes leaving via non-evaporative outflow [kg s⁻¹].
-
-         Outflow carries well-mixed storage concentration (correct).
-        """
-
-        return np.sum(self.qout) * self.open_water.get_conc_iso_liquid(Isotopologue)
-
-    def calc_flux_i_in(self, Isotopologue, **kwargs):
-        """
-        Isotope flux entering via non-evaporative inflow [kg s⁻¹].
-
-        """
-
-        return np.sum([q * c[Isotopologue]
-                for q, c in zip(self.qin, self.conc_in)])
-
-    def calc_flux_i_evap(self, Isotopologue, **kwargs):
-
-        """
-        Isotope flux leaving via evaporation [kg s⁻¹].
-
-        Craig-Gordon model in R space:
-            R_E = (α*·R_L − h·R_A − ε_tot/1000) / (1 − h + ε_k/1000)
-
-        Bug fixes
-        ---------
-        - R_a was fetched as concentration but used as ratio → now converted
-        - Round-trip R→δ→C replaced with direct R→C conversion
-        - cv_a multiplier removed (was double-counting units)
-
-        """
-
-        # ── Liquid storage: concentration → ratio ──────────────────
-        C_l = self.open_water.get_conc_iso_liquid(Isotopologue)
-        R_l = iso_delta.concentration_to_ratio(C_l, solute_i=Isotopologue)
-
-        # ── Atmospheric vapor: concentration → ratio ────────────────
-        C_a = self.atmosphere.get_conc_iso_vapor(Isotopologue)
-        R_a = iso_delta.concentration_to_ratio(C_a, solute_i=Isotopologue)
-
-        # ── Fractionation factors ───────────────────────────────────
-        ha = self.atmosphere.Rh
-        alpha_i = self.atmosphere.alpha_i(Isotopologue=Isotopologue,
-                                          T=self.T, **kwargs)
-        epsilon_k = self.epsilon_k(Isotopologue=Isotopologue)  # ‰
-
-        # ── Craig-Gordon R_E ────────────────────────────────────────
-        R_i = self.Ri_evap(RL=R_l, Ra=R_a, ha=ha,
-                           alpha_i=alpha_i, ep_k=epsilon_k)
-
-        # ── R → concentration ─────────────
-        delta_i = iso_delta.ratio_to_delta(R_i=R_i, solute_i=Isotopologue)
-        C_i = iso_delta.delta_to_concentration(delta_i=delta_i, solute_i=Isotopologue)
-
-        # ── Isotope mass flux [kg s⁻¹] ──────────────────────────────
-        # q_evap [m³ s⁻¹] × C_i [kg m⁻³] = [kg s⁻¹]
-        return self.q_evap * C_i # * self.atmosphere.cv_a
-
-    def Ri_evap(self, RL, Ra, ha, alpha_i, ep_k):
-
-        """
-        Net liquid water isotope flux into the water body [Not evaporation ]
-
-        """
-        eps_star = (alpha_i - 1.0) * 1000.0  # ‰  equilibrium enrichment
-        eps_tot = eps_star + ep_k  # ‰  total fractionation
-
-        return (alpha_i * RL - ha * Ra) / (1 - ha + ep_k/1000)
-
-    def epsilon_k(self, Isotopologue):
-        """
-        kinetic fractination factor
-
-        """
-
-        if Isotopologue == "2H":
-            n = 12.5
-        elif Isotopologue == "18O":
-            n = 14.2
-        else:
-            return ValueError
-
-        h = self.atmosphere.Rh
-
-        return n * (1 - h)
-
-    def calc_new_volume(self, delta_t):
-
-        v_in = np.sum(self.qin) * delta_t
-        v_out = (np.sum(self.qout) + self.q_evap) * delta_t
-
-        delta_v = v_in - v_out
-        V_new = max(self.open_water.get_volume() + delta_v , 0.0)
-
-        return V_new
-
-    """
-    def calc_new_storage_concentration(self, Isotopologue, delta_m, V_new):
-
-        m_old = self.open_water.get_iso_mass(Isotopologue=Isotopologue)
-        m_new = m_old + delta_m
-
-        # -------update concentration ------------
-        C_old = self.open_water.get_conc_iso_liquid(Isotopologue)
-
-        if V_new == 0:
-            C_new = 0
-        else:
-            C_new = m_new / V_new
-
-        return C_new
-    
-    """
 

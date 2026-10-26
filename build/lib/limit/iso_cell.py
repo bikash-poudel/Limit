@@ -85,7 +85,6 @@ class iso_cell(cell_node):
         """
         cell_node.__init__(self, location)
 
-
         self.__ID = self.__class__.current_ID
         self.__class__.current_ID += 1  # increment the current ID for the next flux node to be created
         # self.__class__.Dict_of_all_cells[self.__ID] = self  # add Instance of flux node to Dict_of_all_flux_nodes
@@ -134,6 +133,7 @@ class iso_cell(cell_node):
         self.__ground_water = None
         self.__outlet = None
         self.__canopy = None
+        self.__snowpack = None
 
         # Storage Connections
         self.__connection_l_diff = []
@@ -153,6 +153,7 @@ class iso_cell(cell_node):
         self.__connection_to_surface_water = None
 
         self.__connection_canopy = None
+        self.__connection_snow = None
         self.__connection_surface_water_ev = None
         self.__connection_neuman = None
         self.__connection_dirichlet = None
@@ -223,7 +224,7 @@ class iso_cell(cell_node):
 
     @property
     def conc_18O(self):
-        """"Returns the concentration of 2H in the soil layers"""
+        """"Returns the concentration of 18O in the soil layers"""
 
         c_18O = []
         for l in self.__layers:
@@ -290,6 +291,11 @@ class iso_cell(cell_node):
     def canopy(self):
 
         return self.__canopy
+
+    @property
+    def snowpack(self):
+
+        return self.__snowpack
 
     @property
     def surface_water(self):
@@ -522,7 +528,6 @@ class iso_cell(cell_node):
         connections = [self.connection_neuman,
                        self.connection_evap,
                        self.connection_prec,
-                       self.connection_runoff,
                        self.connection_groundwater,
                        self.connection_to_aquifer,
                        self.connection_to_surface_water]
@@ -663,7 +668,7 @@ class iso_cell(cell_node):
 
     def add_evaporation(self, layer=None, hydrodynamic_dispersivity=0.0):
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection e.
 
         Returns
         -------
@@ -683,7 +688,7 @@ class iso_cell(cell_node):
 
     def add_transpiration(self):
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection
 
         Returns
         -------
@@ -704,7 +709,7 @@ class iso_cell(cell_node):
 
     def add_surface_runoff(self):
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection
 
         Returns
         -------
@@ -720,7 +725,7 @@ class iso_cell(cell_node):
 
     def add_precipitation(self):
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection
 
         Returns
         -------
@@ -737,7 +742,7 @@ class iso_cell(cell_node):
 
     def add_aquifer(self, aquifer, soil_layer, ql_aq=None):
         """
-       Assign boundary connection to water storage body..
+       Assign boundary connection to water storage body.
 
        Returns
        -------
@@ -781,7 +786,7 @@ class iso_cell(cell_node):
 
     def add_ground_water(self, ground_water, soil_layer, q_gw=None):
         """
-       Assign boundary connection to water storage body..
+       Assign boundary connection to water storage body.
 
        Returns
        -------
@@ -812,7 +817,7 @@ class iso_cell(cell_node):
     def add_canopy(self, canopy):
 
         """
-        Assign boundary storage etc..
+        Assign boundary storage etc.
 
           Returns
           -------
@@ -820,21 +825,43 @@ class iso_cell(cell_node):
 
         self.__canopy = canopy
 
-        try:
+        # try:
 
-            can = iso_fluxes.open_water_evaporation(atmosphere=self.atmosphere,
-                                                    open_water_body = canopy
-                                                    )
+            # can = iso_fluxes.open_water_evaporation(atmosphere=self.atmosphere,
+                                   #                 open_water_body = canopy
+                                    #                )
 
-            self.__connection_canopy = can
+            # self.__connection_canopy = can
 
-        except ValueError as err:
-            raise NotImplementedError("A required value was not provided.")
+        # except ValueError as err:
+         #   raise NotImplementedError("A required value was not provided.")
+
+    def add_snowpack(self, snow):
+
+        """
+        Assign boundary storage etc.
+
+          Returns
+          -------
+        """
+
+        self.__snowpack = snow
+
+        # try:
+
+            # sn = iso_fluxes.open_water_evaporation(atmosphere=self.atmosphere,
+               #                                     open_water_body = snow
+                #                                    )
+
+            # self.__connection_snow = sn
+
+         # except ValueError as err:
+           # raise NotImplementedError("A required value was not provided.")
 
 
     def add_neuman_boundary(self, soil_layer):
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection eq: atmosphere etc.
 
         Returns
         -------
@@ -852,7 +879,7 @@ class iso_cell(cell_node):
     def add_outlet(self, outlet):
 
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection
 
         Returns
         -------
@@ -875,7 +902,7 @@ class iso_cell(cell_node):
 
     def add_dirichlet_boundary(self, soil_layer):
         """
-        Assign boundary connection eq: atmosphere etc..
+        Assign boundary connection .
 
         Returns
         -------
@@ -985,7 +1012,7 @@ class iso_cell(cell_node):
     def update_surface_water(self, c_iso={"2H": 1.0, "18O": 1.0}):
 
         """
-        Updates the iso concentration in aquifer to current time step
+        Updates the iso concentration to current time step
 
         Returns
         -------
@@ -1001,7 +1028,6 @@ class iso_cell(cell_node):
     def update_canopy(self, c_iso={"2H": 1.0, "18O": 1.0}):
 
         """
-        Updates the iso concentration in aquifer to current time step
 
         Returns
         -------
@@ -1010,6 +1036,21 @@ class iso_cell(cell_node):
         try:
             self.__canopy.set_conc_iso_liquid(c_iso["2H"], "2H")
             self.__canopy.set_conc_iso_liquid(c_iso["18O"], "18O")
+
+        except ValueError as err:
+            raise NotImplementedError("A required value was not provided.") from err
+
+    def update_snowpack(self, c_iso={"2H": 1.0, "18O": 1.0}):
+
+        """
+
+        Returns
+        -------
+        """
+
+        try:
+            self.__snowpack.set_conc_iso_liquid(c_iso["2H"], "2H")
+            self.__snowpack.set_conc_iso_liquid(c_iso["18O"], "18O")
 
         except ValueError as err:
             raise NotImplementedError("A required value was not provided.") from err
@@ -1031,7 +1072,7 @@ class iso_cell(cell_node):
 
     def update_outlet(self, c_iso={"2H": 1.0, "18O": 1.0}):
         """
-        Updates the iso concentration in aquifer to current time step
+
 
         Returns
         -------
@@ -1254,7 +1295,6 @@ class iso_cell(cell_node):
     def update_groundwater_connection(self, q_gw=0.0):
 
         """
-        Updates the runoff flux to current time step
 
         Returns
         -------
@@ -1271,7 +1311,6 @@ class iso_cell(cell_node):
     def update_outlet_connection(self, q_outlet: list):
 
         """
-        Updates the runoff flux to current time step
 
         Returns
         -------
@@ -1320,7 +1359,7 @@ class iso_cell(cell_node):
     def update_dirichlet_boundary(self, c_dirichlet={"2H": 1.0, "18O": 1.0}):
 
         """
-        Updates the neuman flux to current time step
+
 
         Returns
         -------

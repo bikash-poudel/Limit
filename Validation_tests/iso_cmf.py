@@ -105,10 +105,10 @@ def cmf_setup():
 
     P, C = cmf_project()  # define project and cell
 
-    L_boundaries = np.array([0.009, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
-                             1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
+    # L_boundaries = np.array([0.009, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.6, 1.0, 1.25, 1.5,
+      #                       1.9, 2.3, 2.8, 3.5, 4.2, 5.0])
 
-    # L_boundaries = np.cumsum([0.01] * 100)
+    L_boundaries = np.cumsum([0.01] * 100)
     # L_boundaries = np.cumsum([0.05] * 20)
 
     add_cmf_layers(C, L_boundaries, rtn_curve())  # define retention curve to all cell layers
@@ -237,7 +237,7 @@ def iso_setup(testcase):
     atm = _atm(testcase)
 
     p = iso_project()
-    p.climate = 'arid'
+    # p.climate = 'arid'
     p.new_cell(atmosphere=atm, area=C.area, x=C.x, y=C.y, z=C.z)
 
     c = p.get_cells()[0]  # get current iso cell

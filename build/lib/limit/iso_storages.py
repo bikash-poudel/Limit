@@ -86,7 +86,7 @@ class flux_node(IsotopeRegistry):
                                     "List of all flux connections from this node to right node if available")
 
     def RegisterConnection(self, newConnection):
-        """fset
+        """
         Registers the given connection.
         """
         self.__Connections.append(newConnection)
@@ -192,7 +192,6 @@ class flux_node(IsotopeRegistry):
         @param ignore_alpha_i:  If set to "True" isotopic frctionation factor will be set to 1 = no fractionation
         @type ignore_alpha_i: Boolean
 
-        Control status: Checked on 16.05.2013 --> Results are the same as for SLI
         """
         ignore_alpha_i = kwargs.get('ignorealphai', False)
 
@@ -229,7 +228,6 @@ class flux_node(IsotopeRegistry):
 
         ignore_alpha_i = kwargs.get('ignorealphai', False)
 
-        T = T + 273.15
         if Isotopologue == "18O":
             # 1000 ln α* = −7.685 + 6712.3/T − 1,666,400/T² + 3.5041×10⁸/T³
             alpha_i = (
@@ -287,7 +285,6 @@ class flux_node(IsotopeRegistry):
 
         p_sat = Saturation vapour pressure, ps, in pascal
 
-        <--checked and own implementation is okay for temp. above 273.15 Kelvin
         """
         # SLI: cable_sli_utils.f90::L2195-2195
         Tzero = 273.16000366210938
@@ -323,9 +320,6 @@ class iso_atmosphere(flux_node):
     """
     Layer storing isotopes
 
-    Description
-    ===========
-      The
     """
 
     def __init__(self,
@@ -400,7 +394,7 @@ class iso_atmosphere(flux_node):
 
     def set_conc_iso_vapor(self, new_conc_iso_vapor, Isotopologue):
         try:
-            assert new_conc_iso_vapor > 0.0, "Given isotope concentration of the isotopologue must be in kg/m2 and >0.0"
+            assert new_conc_iso_vapor > 0.0, "Given isotope concentration of the isotopologue must be in kg/m3 and >0.0"
 
             self.__conc_iso_vapor[Isotopologue] = new_conc_iso_vapor
 
@@ -415,7 +409,6 @@ class iso_atmosphere(flux_node):
         T = Temperature in Kelvin
         Rh = Relative humidity
 
-        Control status: Checked on 15.05.2013 --> Results are the same as for SLIsli_main.f90::L205
         """
 
         # SLI: sli_main.f90::L205
@@ -676,7 +669,7 @@ class iso_storage(flux_node):
         # return storage_v * storage_i
         """
         avail_vol = kr._calc_avail_vol(
-            self.theta_sat, self.thickness, self.cell.area)
+            self.theta_sat, self.theta_0, self.thickness, self.cell.area)
         del_eff_S = self.del_eff_saturation(Isotopologue=Isotopologue, **kwargs)
         conc_iso = self._conc_iso_liquid[0 if Isotopologue == "2H" else 1]
 
@@ -703,7 +696,7 @@ class iso_storage(flux_node):
         # return (self.theta_sat - self.theta_0) * self.thickness * self.cell.area
 
         return kr._calc_avail_vol(
-            self.theta_sat, self.thickness, self.cell.area)
+            self.theta_sat, self.theta_0, self.thickness, self.cell.area)
 
     def get_eff_liquid_volume(self, Isotopologue, **kwargs):
         """
@@ -715,7 +708,7 @@ class iso_storage(flux_node):
          """
 
         avail_vol = kr._calc_avail_vol(
-            self.theta_sat, self.thickness, self.cell.area)
+            self.theta_sat, self.theta_0, self.thickness, self.cell.area)
 
         eff_S = self.eff_saturation(Isotopologue=Isotopologue, **kwargs)
 
@@ -1076,77 +1069,6 @@ class iso_storage(flux_node):
         return kr._calc_S(theta, self.theta_0, theta_sat)
 
 
-class iso_pond(flux_node):
-    """
-    Description
-    ===========
-      A pond like layer storing the state, location and dimension:
-      -water storage
-      -isotopes
-      -temperature
-    Each storage belong to a cell defining the horizontal shape (area in m2)
-    """
-
-    def __init__(self,
-                 pond_height_t0=0.0,
-                 pond_height=0.0,
-                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
-                 T=283.15,  # temperature in Kelvin
-                 ):
-        """
-        Constructor of iso_storage
-        """
-        flux_node.__init__(self, conc_iso_liquid, T)
-        self.pond_height_t0 = pond_height_t0
-        self.__pond_height = pond_height
-        self.delta_h0 = self.__pond_height - pond_height_t0  # change in pond height
-
-    @property
-    def pond_height(self):
-        return self.__pond_height
-
-    @pond_height.setter
-    def pond_height(self, pond_height):
-        self.__pond_height = pond_height
-
-
-class iso_surface_water(iso_aquifer):
-    """"
-    Storage of isotopes in boundary can be an instance of flux node.
-    """
-
-    def __init__(self,
-                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
-                 T=273.17,
-                 volume=1 # []
-                 ):
-        flux_node.__init__(self, conc_iso_liquid, T)
-
-        self.volume = volume
-
-    def get_volume(self):
-        return self.volume
-
-    def set_volume(self, v_new):
-
-        self.volume = v_new
-
-    def get_iso_mass(self, Isotopologue):
-        return self.get_conc_iso_liquid(Isotopologue) * self.volume
-
-
-class iso_outlet(iso_aquifer):
-    """"
-    Storage of isotopes in boundary can be an instance of flux node.
-    """
-
-    def __init__(self,
-                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
-                 T=283.15,  # temperature in Kelvin
-                 ):
-        iso_aquifer.__init__(self, conc_iso_liquid, T)
-
-
 class iso_soil_layer(iso_storage):
     """
     Description
@@ -1204,34 +1126,87 @@ class iso_soil_layer(iso_storage):
             self.upper_boundary > other_layer.lower_boundary
 
 
-class iso_canopy(flux_node):
+class iso_pond(flux_node):
     """
-        Layer storing isotopes
-
-        Description
-        ===========
-          The
-        """
+    Description
+    ===========
+      A pond like layer storing the state, location and dimension:
+      -water storage
+      -isotopes
+      -temperature
+    Each storage belong to a cell defining the horizontal shape (area in m2)
+    """
 
     def __init__(self,
+                 pond_height_t0=0.0,
+                 pond_height=0.0,
                  conc_iso_liquid={"2H": 1.0, "18O": 1.0},
-                 T=273.17,
-                 volume=1  # m3
+                 T=283.15,  # temperature in Kelvin
                  ):
+        """
+        Constructor of iso_storage
+        """
         flux_node.__init__(self, conc_iso_liquid, T)
+        self.pond_height_t0 = pond_height_t0
+        self.__pond_height = pond_height
+        self.delta_h0 = self.__pond_height - pond_height_t0  # change in pond height
 
+    @property
+    def pond_height(self):
+        return self.__pond_height
+
+    @pond_height.setter
+    def pond_height(self, pond_height):
+        self.__pond_height = pond_height
+
+
+class iso_boundary_storage(iso_aquifer):
+
+    def __init__(
+        self,
+        conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+        T=273.17,
+        volume=1.0
+    ):
+        flux_node.__init__(self, conc_iso_liquid, T)
         self.volume = volume
 
     def get_volume(self):
         return self.volume
 
     def set_volume(self, v_new):
-
         self.volume = v_new
 
     def get_iso_mass(self, Isotopologue):
+        return (
+            self.get_conc_iso_liquid(Isotopologue)
+            * self.volume
+        )
 
-        return self.get_conc_iso_liquid(Isotopologue) * self.volume
+
+class iso_surface_water(iso_boundary_storage):
+
+    pass
+
+
+class iso_outlet(iso_aquifer):
+    """"
+    Storage of isotopes in boundary can be an instance of flux node.
+    """
+
+    def __init__(self,
+                 conc_iso_liquid={"2H": 1.0, "18O": 1.0},
+                 T=283.15,  # temperature in Kelvin
+                 ):
+        iso_aquifer.__init__(self, conc_iso_liquid, T)
+
+
+class iso_canopy(iso_boundary_storage):
+    pass
+
+
+class iso_snowpack(iso_boundary_storage):
+    pass
 
 
 class Point(object):

@@ -4,6 +4,7 @@ numba
 
 [cmf]
 cmf>=2.0
+matplotlib
 
 [dev]
 pytest

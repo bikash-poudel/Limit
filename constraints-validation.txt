@@ -1,0 +1,5 @@
+cmf==2.0.2
+numpy==1.26.4
+scipy==1.17.1
+numba==0.67.0
+matplotlib==3.11.1

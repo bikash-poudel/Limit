@@ -8,6 +8,7 @@ dependencies:
   - numpy
   - numba
   - scipy
+  - matplotlib
   - pip
 
   # core install of LIMIT (editable recommended for dev)

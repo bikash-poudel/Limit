@@ -1,14 +1,15 @@
 Metadata-Version: 2.4
 Name: limit
-Version: 0.1
+Version: 1.0.0
 Summary: Loosely coupled Modular framework for Isotope Transport (LIMIT)
-Author: Bikash
+Author: Bikash Poudel
 License-File: license.txt
 Requires-Dist: numpy
 Requires-Dist: scipy
 Requires-Dist: numba
 Provides-Extra: cmf
 Requires-Dist: cmf>=2.0; extra == "cmf"
+Requires-Dist: matplotlib; extra == "cmf"
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: black; extra == "dev"

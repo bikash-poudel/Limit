@@ -83,8 +83,29 @@ def compute_surface_temperature(T1, dz1, lam1, evap=0.0, T_atm=25.0, h_c=10.0, L
     return T_s
 
 
-def compute_temperature(T, theta, RH, q_liq, q_vap, soil, dt, dz,
-                               T_atm=25.0, q_evap=0.0, h_c=10.0, S=None):
+def upstream_temperature(face_flux, T, T_top, T_bottom):
+
+    face_flux = np.asarray(face_flux, dtype=float)
+    T = np.asarray(T, dtype=float)
+
+    if face_flux.shape != (len(T) + 1,):
+        raise ValueError("Expected N+1 interface fluxes for N layers.")
+
+    donor = np.empty(len(T) + 1)
+
+    donor[0] = T_top if face_flux[0] > 0 else T[0]
+    donor[-1] = T_bottom if face_flux[-1] < 0 else T[-1]
+
+    donor[1:-1] = np.where(
+        face_flux[1:-1] >= 0,
+        T[:-1],
+        T[1:],
+    )
+    return donor
+
+
+def compute_temperature(T, theta, theta_old, theta_sat, RH, q_liq, q_vap, soil, dt, dz,
+                               T_atm=303.15, q_evap=0.0, h_c=10.0, S=None):
     """
     Update soil temperature in a 1-D layered column with calculated surface temperature.
     Safe indexing is used for advection terms to avoid out-of-bounds errors.
@@ -97,24 +118,91 @@ def compute_temperature(T, theta, RH, q_liq, q_vap, soil, dt, dz,
 
     #
     # vapor flux [m/s] to [kg/m2/s]
-    J_vap = np.array([vapor_flux_to_mass_flux(qv, t, rh)
-                      for qv, t, rh in zip(q_vap, T, RH)])
-    J_vap = np.insert(J_vap, 0, q_vap[0])
+    # J_vap = np.array([vapor_flux_to_mass_flux(qv, t, rh)
+      #                for qv, t, rh in zip(q_vap, T, RH)])
+    # J_vap = np.insert(J_vap, 0, q_vap[0])
+
+    # N layers have N+1 interfaces.
+    q_vap = np.asarray(q_vap, dtype=float)
+    T = np.asarray(T, dtype=float)
+    RH = np.asarray(RH, dtype=float)
+
+    # Water-equivalent vapor flux [m/s] -> mass flux [kg/m²/s].
+    q_vap = np.asarray(q_vap, dtype=float)
+
+    if q_vap.shape != (N + 1,):
+        raise ValueError("q_vap must contain N+1 interface fluxes.")
+
+    J_vap = rho_w * q_vap
+
+    # Surface latent cooling is included by the surface energy balance.
+    J_latent = J_vap.copy()
+    J_latent[0] = 0.0
 
     # evap flux from [m/s] to [kg/m2/s]
-    evap = np.array(-q_evap) * 100
+    # evap = np.array(-q_evap) * 100
+    evap = rho_w * q_evap
 
-    # Volumetric heat capacity and thermal conductivity
-    C = (1 - theta) * rho_s * c_s + theta * rho_w * c_w
+    theta = np.asarray(theta, dtype=float)
+    theta_old = np.asarray(theta_old, dtype=float)
+    theta_sat = np.asarray(theta_sat, dtype=float)
+
+    # Volumetric heat capacity, neglecting pore-air heat capacity [J/m³/K].
+    C = (1.0 - theta_sat) * rho_s * c_s + theta * rho_w * c_w
+    # C = (1 - theta) * rho_s * c_s + theta * rho_w * c_w
+
+    C_old =  (1.0 - theta_sat) * rho_s * c_s + theta_old * rho_w * c_w
+
+    dz = np.asarray(dz, dtype=float)
+    q_liq = np.asarray(q_liq, dtype=float)
+
+    # Outgoing sensible-heat transport coefficients for each layer.
+    outgoing = (
+            rho_w * c_w * (
+            np.maximum(q_liq[1:], 0.0)
+            + np.maximum(-q_liq[:-1], 0.0)
+    )
+            + 1850.0 * (
+                    np.maximum(J_vap[1:], 0.0)
+                    + np.maximum(-J_vap[:-1], 0.0)
+            )
+    )
+
+    active = outgoing > 0.0
+
+    if np.any(active):
+        dt_limit = np.min(C_old[active] * dz[active] / outgoing[active])
+
+        if dt > 0.8 * dt_limit:
+            raise ValueError(
+                f"Explicit heat advection: dt={dt:.1f} s exceeds "
+                f"the conservative limit {0.8 * dt_limit:.1f} s."
+            )
+
     lam = lambda_dry + (lambda_sat - lambda_dry) * (theta**1.5)
     L_v = 2.45e6  # latent heat
 
+    T_reference = 273.15
+
     # Compute surface temperature
-    T_surf = compute_surface_temperature(T[0], dz[0], lam[0], evap, T_atm, h_c, L_v)
+    # T_surf = compute_surface_temperature(T[0], dz[0], lam[0], evap, T_atm, h_c, L_v)
 
     # Build tridiagonal system
     A = np.zeros((N, N))
     RHS = np.zeros(N)
+
+    q_liq = np.asarray(q_liq, dtype=float)
+
+    if q_liq.shape != (N + 1,):
+        raise ValueError("q_liq must contain N+1 interface fluxes.")
+
+    T_liq_face = upstream_temperature(q_liq, T, T_atm, T[-1])
+    T_vap_face = upstream_temperature(J_vap, T, T_atm, T[-1])
+
+    T_reference = 273.15
+
+    heat_liq = rho_w * c_w * q_liq * (T_liq_face - T_reference)
+    heat_vap = 1850.0 * J_vap * (T_vap_face - T_reference)
 
     for i in range(N):
 
@@ -132,36 +220,63 @@ def compute_temperature(T, theta, RH, q_liq, q_vap, soil, dt, dz,
         A[i, i] = C[i]/dt - (A[i, i-1] if i > 0 else 0) - (A[i, i+1] if i < N-1 else 0)
 
         # RHS: old temperature + advection + latent + sources
-        RHS[i] = C[i]*T[i]/dt
+        # RHS[i] = C[i]*T[i]/dt
+
+        RHS[i] = ( C_old[i] * (T[i] - T_reference) + C[i] * T_reference) / dt
 
         # --- Advection terms with safe upwind indexing ---
         # Liquid
-        T_up_in  = T[i-1] if i > 0 else T[i]       # bottom interface
-        T_up_out = T[i+1] if i < N-1 else T[i]    # top interface
-        adv_liq = rho_w * c_w * (q_liq[i+1]*T_up_out - q_liq[i]*T_up_in)
+        # T_up_in  = T[i-1] if i > 0 else T[i]       # bottom interface
+        # T_up_out = T[i+1] if i < N-1 else T[i]    # top interface
+        # adv_liq = rho_w * c_w * (q_liq[i+1]*T_up_out - q_liq[i]*T_up_in)
 
         # Vapor
-        adv_vap = 1850 * (J_vap[i+1]*T_up_out - J_vap[i]*T_up_in)
+        # adv_vap = 1850 * (J_vap[i+1]*T_up_out - J_vap[i]*T_up_in)
+
+        adv_liq = heat_liq[i + 1] - heat_liq[i]
+        adv_vap = heat_vap[i + 1] - heat_vap[i]
 
         # Latent heat from vapor flux
-        latent = L_v * (J_vap[i+1] - J_vap[i])
+        # latent = L_v * (J_vap[i+1] - J_vap[i])
+        # RHS[i] += -(adv_liq + adv_vap)/dz_i + latent/dz_i
 
-        RHS[i] += -(adv_liq + adv_vap)/dz_i + latent/dz_i
+        # Divergence of latent heat transport [W/m²].
+        # latent = L_v * (J_vap[i + 1] - J_vap[i])
+
+        latent = L_v * (J_latent[i + 1] - J_latent[i])
+
+        RHS[i] -= (adv_liq + adv_vap + latent) / dz_i
 
         if S is not None:
             RHS[i] += S[i]
 
-    # Top boundary: surface temperature as Dirichlet BC
-    A[0, :] = 0.0
-    A[0, 0] = 1.0
-    RHS[0] = T_surf
+    # Surface energy balance, coupled implicitly to the first layer.
+    # Temperatures are in Kelvin; evaporation is positive outward.
+    g_surface = lam[0] / (0.5 * dz[0])  # W m^-2 K^-1
+    denominator = g_surface + h_c
+
+    # Downward conductive heat flux:
+    # G = g_surface * (T_surface - T_new[0])
+    #   = conductance * (T_atm - T_new[0]) - latent_sink
+    conductance = g_surface * h_c / denominator
+    latent_sink = g_surface * L_v * evap / denominator
+
+    A[0, 0] += conductance / dz[0]
+    RHS[0] += (conductance * T_atm - latent_sink) / dz[0]
 
     # Bottom boundary: fixed temperature (can be replaced by flux BC later)
     A[-1, :] = 0.0
     A[-1, -1] = 1.0
     RHS[-1] = T[-1]
 
-    # Solve linear system
     T_new = np.linalg.solve(A, RHS)
+
+    # Surface temperature consistent with the updated first-layer temperature.
+    T_surf = (
+                     g_surface * T_new[0] + h_c * T_atm - L_v * evap
+             ) / denominator
+
     return T_new, T_surf
+
+
 
